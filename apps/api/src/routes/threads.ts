@@ -11,15 +11,15 @@ import {
   createThread,
   deleteThread,
   listThreads,
-  renameThread,
   ThreadNotFoundError,
+  updateThread,
 } from "../lib/chat-store";
 
 /**
  * 会话列表 CRUD：/api/threads
- * GET    /            滚动加载（keyset cursor）
+ * GET    /            列表（置顶段全量 + 普通段 keyset cursor 分页）
  * POST   /            预建会话（延迟创建模式下前端通常不调）
- * PATCH  /:id         重命名
+ * PATCH  /:id         重命名 / 置顶 / 取消置顶
  * DELETE /:id         删除（消息级联）
  */
 export const threadsRoutes = new Hono<{ Variables: { session: Session } }>();
@@ -54,10 +54,11 @@ threadsRoutes.patch("/:id", async (c) => {
   }
   const { user } = c.get("session");
   try {
-    const thread = await renameThread({
+    const thread = await updateThread({
       threadId: c.req.param("id"),
       userId: user.id,
       title: body.data.title,
+      pinned: body.data.pinned,
     });
     return c.json(thread);
   } catch (e) {

@@ -4,6 +4,10 @@
 
 @import 'tw-animate-css';
 
+/* streamdown 及插件的 tailwind 类名来源（v4 需显式 @source） */
+@source '../../node_modules/streamdown/dist/index.js';
+@source '../../node_modules/@streamdown/cjk/dist/index.js';
+
 @custom-variant dark (&:is(.dark *));
 
 :root {

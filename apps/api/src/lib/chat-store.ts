@@ -1,6 +1,6 @@
 import { schema } from "@wow/db";
 import type { ThreadMessage, ThreadSummary } from "@wow/shared";
-import { and, desc, eq, lt, or } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
 
 import { db } from "../db";
 
@@ -27,6 +27,7 @@ const toSummary = (row: ThreadRow): ThreadSummary => ({
   createdAt: row.createdAt.toISOString(),
   lastMessageAt: row.lastMessageAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
+  pinnedAt: row.pinnedAt ? row.pinnedAt.toISOString() : null,
 });
 
 const toMessage = (row: MessageRow): ThreadMessage => ({
@@ -54,17 +55,29 @@ export function deriveTitle(parts: Array<{ type: string }>): string {
 }
 
 /**
- * 会话列表：keyset 分页（(lastMessageAt, id) 复合游标，DESC）。
+ * 会话列表（两段式）：置顶段（pinnedAt DESC，全量，上限防御）+
+ * 普通段（排除置顶，(lastMessageAt, id) 复合游标 keyset 分页）。
  * cursor 格式 "<lastMessageAtISO>|<id>"，取 limit+1 判断 hasMore。
  */
 export async function listThreads(opts: {
   userId: string;
   limit: number;
   cursor?: string;
-}): Promise<{ items: ThreadSummary[]; nextCursor: string | null }> {
+}): Promise<{
+  pinned: ThreadSummary[];
+  items: ThreadSummary[];
+  nextCursor: string | null;
+}> {
   const { userId, limit, cursor } = opts;
 
-  const conditions = [eq(chatThread.userId, userId)];
+  const pinnedRows = await db
+    .select()
+    .from(chatThread)
+    .where(and(eq(chatThread.userId, userId), isNotNull(chatThread.pinnedAt)))
+    .orderBy(desc(chatThread.pinnedAt))
+    .limit(50);
+
+  const conditions = [eq(chatThread.userId, userId), isNull(chatThread.pinnedAt)];
   if (cursor) {
     const sep = cursor.lastIndexOf("|");
     const cursorTime = new Date(cursor.slice(0, sep));
@@ -91,6 +104,7 @@ export async function listThreads(opts: {
   const last = page.at(-1);
 
   return {
+    pinned: pinnedRows.map(toSummary),
     items: page.map(toSummary),
     nextCursor: hasMore && last ? `${last.lastMessageAt.toISOString()}|${last.id}` : null,
   };
@@ -128,16 +142,23 @@ export async function getOwnedThread(
   return row ? toSummary(row) : null;
 }
 
-export async function renameThread(opts: {
+/** 更新会话：重命名 / 置顶 / 取消置顶（只处理提供的字段） */
+export async function updateThread(opts: {
   threadId: string;
   userId: string;
-  title: string;
+  title?: string;
+  pinned?: boolean;
 }): Promise<ThreadSummary> {
   const owned = await getOwnedThread(opts.threadId, opts.userId);
   if (!owned) throw new ThreadNotFoundError();
+
+  const set: Partial<typeof chatThread.$inferInsert> = { updatedAt: new Date() };
+  if (opts.title !== undefined) set.title = opts.title;
+  if (opts.pinned !== undefined) set.pinnedAt = opts.pinned ? new Date() : null;
+
   const [row] = await db
     .update(chatThread)
-    .set({ title: opts.title, updatedAt: new Date() })
+    .set(set)
     .where(eq(chatThread.id, opts.threadId))
     .returning();
   return toSummary(row);

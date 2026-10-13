@@ -13,7 +13,8 @@ export const env = createEnv({
   clientPrefix: "VITE_",
 
   client: {
-    VITE_API_BASE_URL: z.url(),
+    // 留空 = 同源相对路径（本地 dev 走 vite proxy → apps/api）
+    VITE_API_BASE_URL: z.url().optional(),
     VITE_APP_TITLE: z.string().min(1).optional(),
   },
 

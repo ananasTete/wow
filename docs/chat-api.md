@@ -42,14 +42,15 @@ GET /api/threads?limit=20&cursor=<nextCursor>
 
 - `limit`：1–50，默认 20
 - `cursor`：首屏不传；后续传上一页返回的 `nextCursor`
-- 分页方式：keyset（`(lastMessageAt, id)` 复合游标，DESC），并发插入不重不漏
+- **两段式响应**：`pinned` 为置顶段（`pinnedAt DESC` 全量返回，服务端上限 50），`items` 为普通段（排除置顶后按 `(lastMessageAt, id)` 复合游标 keyset 分页，DESC，并发插入不重不漏）。置顶段随每页重复返回，前端取首页即可
 - 响应：
 
 ```json
 {
-  "items": [
-    { "id": "uuid", "title": "上海天气怎么样", "createdAt": "ISO", "lastMessageAt": "ISO", "updatedAt": "ISO" }
+  "pinned": [
+    { "id": "uuid", "title": "上海天气怎么样", "pinnedAt": "ISO 或 null", "createdAt": "ISO", "lastMessageAt": "ISO", "updatedAt": "ISO" }
   ],
+  "items": [ ... ],
   "nextCursor": "2026-10-13T16:00:00.000Z|uuid 或 null"
 }
 ```
@@ -59,10 +60,12 @@ GET /api/threads?limit=20&cursor=<nextCursor>
 ### 会话增删改
 
 ```
-POST   /api/threads        body { "title"?: string /* 1–80 字 */ }  → 201 ThreadSummary
-PATCH  /api/threads/:id    body { "title": string }                  → 200 ThreadSummary
-DELETE /api/threads/:id                                          → 204（消息级联删除）
+POST   /api/threads        body { "title"?: string /* 1–80 字 */ }            → 201 ThreadSummary
+PATCH  /api/threads/:id    body { "title"?, "pinned"? }（至少一项）           → 200 ThreadSummary
+DELETE /api/threads/:id                                                      → 204（消息级联删除）
 ```
+
+- `PATCH` 语义：`title` 重命名；`pinned: true` 置顶（写当前时间为 `pinnedAt`，置顶区按此排序——最近置顶的在前），`pinned: false` 取消置顶（`pinnedAt` 置 null）
 
 ### 会话消息
 

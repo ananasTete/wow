@@ -91,8 +91,8 @@ export const agentRun = pgTable("agent_run", {
 });
 
 /**
- * 对话会话。threadId 由前端生成（延迟创建：首条消息时才落库），
- * 列表按 lastMessageAt 倒序 + keyset 分页（(lastMessageAt, id) 复合游标）。
+ * 对话会话。threadId 由前端生成（延迟创建：首条消息时才落库）。
+ * 列表两段式：置顶段（pinnedAt DESC，全量）+ 普通段（lastMessageAt DESC + keyset 分页）。
  */
 export const chatThread = pgTable(
   "chat_thread",
@@ -102,6 +102,7 @@ export const chatThread = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     title: text("title").notNull().default("新对话"),
+    pinnedAt: timestamp("pinned_at", { withTimezone: true }),
     lastMessageAt: timestamp("last_message_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

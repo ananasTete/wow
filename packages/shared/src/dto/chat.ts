@@ -14,14 +14,17 @@ export const uiPartSchema = z.looseObject({
 export const threadSummarySchema = z.object({
   id: z.string(),
   title: z.string(),
+  /** 置顶时间（置顶段排序键），null = 未置顶 */
+  pinnedAt: z.string().nullable(),
   createdAt: z.string(),
   lastMessageAt: z.string(),
   updatedAt: z.string(),
 });
 export type ThreadSummary = z.infer<typeof threadSummarySchema>;
 
-/** 会话列表响应：keyset 分页，cursor 指向下一页起点 */
+/** 会话列表响应：置顶段（全量）+ 普通段（keyset 分页） */
 export const threadListResponseSchema = z.object({
+  pinned: z.array(threadSummarySchema),
   items: z.array(threadSummarySchema),
   nextCursor: z.string().nullable(),
 });
@@ -39,10 +42,15 @@ export const createThreadRequestSchema = z.object({
   title: z.string().min(1).max(80).optional(),
 });
 
-/** 重命名请求 */
-export const updateThreadRequestSchema = z.object({
-  title: z.string().min(1).max(80),
-});
+/** 更新会话请求：重命名 / 置顶 / 取消置顶（至少一项） */
+export const updateThreadRequestSchema = z
+  .object({
+    title: z.string().min(1).max(80).optional(),
+    pinned: z.boolean().optional(),
+  })
+  .refine((v) => v.title !== undefined || v.pinned !== undefined, {
+    message: "至少提供 title 或 pinned 之一",
+  });
 
 /** 历史消息（= UIMessage + createdAt） */
 export const threadMessageSchema = z.object({

@@ -57,3 +57,12 @@ catalog:
   "tw-animate-css": ^1.3.6
   vite: ^8.0.0
   zustand: ^5.0.15
+  # ---- 前端补充（chat UI）----
+  "@ai-sdk/react": ^4.0.141
+  "@radix-ui/react-use-controllable-state": ^1.3.0
+  "@streamdown/cjk": ^1.0.4
+  motion: ^14.1.1
+  nanoid: ^6.0.2
+  recharts: ^3.10.1
+  streamdown: ^2.7.0
+  "use-stick-to-bottom": ^1.1.6
