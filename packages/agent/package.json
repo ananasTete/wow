@@ -1,0 +1,28 @@
+{
+  "name": "@wow/agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/mastra/index.ts"
+  },
+  "scripts": {
+    "dev": "mastra dev",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "catalog:",
+    "@mastra/core": "catalog:",
+    "@mastra/memory": "catalog:",
+    "@mastra/pg": "catalog:",
+    "@t3-oss/env-core": "catalog:",
+    "@wow/db": "workspace:*",
+    "ai": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "mastra": "catalog:",
+    "typescript": "catalog:"
+  }
+}

@@ -63,10 +63,24 @@ PGLite（数据固定在 `packages/db/.data/pg`，与迁移脚本写入的是同
 ## 结构约定
 
 ```
+packages/agent   # Mastra 实例 + 唯一 provider + agent 定义；`pnpm --filter @wow/agent dev` 起 playground（:4111）
 packages/db      # schema、迁移、双模式 client（单一来源，api 与 Mastra storage 共用）
 packages/shared  # 共享 env schema 片段等
 apps/api         # Hono + better-auth；env 校验、路由、session 中间件
 ```
+
+### AI provider（packages/agent）
+
+- **唯一 provider**：`@ai-sdk/openai-compatible`，所有 agent 从 `src/provider.ts` 取模型。
+- **环境变量**：`OPENAI_BASE_URL`（默认 `https://api.openai.com/v1`）、`OPENAI_API_KEY`、
+  `OPENAI_MODEL`（默认 `gpt-4o-mini`）。可接入任意 OpenAI 端点规范的服务
+  （官方 / DeepSeek / Groq / vLLM / Ollama）。
+- **storage**：设了 `DATABASE_URL` 时用 `@mastra/pg` 的 `PostgresStore`（生产）；
+  本地 playground 不设时回退内存存储（dev 可接受，playground 产生的 trace 不持久化）。
+- **开发节奏**：先在 playground 调 agent（prompt / tools / memory）→ 固化数据模型与 API →
+  再开发前端。playground 是无鉴权的本地 dev 工具，不部署。
+- **为什么是 package 而不是独立 app**：`apps/api` 同进程 `import { mastra } from "@wow/agent"`
+  直读 session，没有跨进程认证；未来要独立部署时只需新增 app 壳，`packages/agent` 不动。
 
 - 版本统一由根 `pnpm-workspace.yaml` 的 catalog 管理，各包用 `catalog:` 引用。
 - API 路由约定：`/auth/*` 归 better-auth；`/api/*` 需 session（中间件 401 拦截）；
@@ -85,3 +99,5 @@ apps/api         # Hono + better-auth；env 校验、路由、session 中间件
 - better-auth 默认 base path 是 `/api/auth`，需显式配置 `basePath`。
 - TypeScript 默认会装到 7.x（原生编译器），行为差异尚多，锁定 ^5.9。
 - PGLite 不会自建数据目录的父级，需先 `mkdirSync(dir, { recursive: true })`。
+- @mastra/pg 的存储类导出名是 `PostgresStore`（不是文档示例里的 `PgStore`）。
+- @mastra/core 1.76 起 `new Agent()` 必须显式传 `id`。
