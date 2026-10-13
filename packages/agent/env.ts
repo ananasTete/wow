@@ -7,6 +7,7 @@ export const env = createEnv({
     OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
     OPENAI_API_KEY: z.string().min(1),
     OPENAI_MODEL: z.string().default("gpt-4o-mini"),
+    TAVILY_API_KEY: z.string().min(1),
     DATABASE_URL: z.string().url().optional(),
   },
   clientPrefix: "PUBLIC_",
@@ -15,6 +16,7 @@ export const env = createEnv({
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     OPENAI_MODEL: process.env.OPENAI_MODEL,
+    TAVILY_API_KEY: process.env.TAVILY_API_KEY,
     DATABASE_URL: process.env.DATABASE_URL,
   },
 });
