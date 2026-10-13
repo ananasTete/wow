@@ -4,15 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts",
+    "dev": "tsx watch --env-file-if-exists=.env.local src/index.ts",
+    "start": "tsx --env-file-if-exists=.env.local src/index.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@hono/node-server": "catalog:",
+    "@mastra/ai-sdk": "catalog:",
     "@t3-oss/env-core": "catalog:",
+    "@wow/agent": "workspace:*",
     "@wow/db": "workspace:*",
     "@wow/shared": "workspace:*",
+    "ai": "catalog:",
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:",
     "hono": "catalog:",

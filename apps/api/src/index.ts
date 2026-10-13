@@ -3,6 +3,8 @@ import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { env } from "../env";
 import { auth, type Session } from "./auth";
+import { chatRoutes } from "./routes/chat";
+import { threadsRoutes } from "./routes/threads";
 
 const app = new Hono<{ Variables: { session: Session } }>();
 
@@ -20,6 +22,10 @@ app.use("/api/*", async (c, next) => {
   c.set("session", session);
   await next();
 });
+
+// chat 业务：会话 CRUD + 会话内消息（全量拉取/发消息 SSE）
+app.route("/api/threads", threadsRoutes);
+app.route("/api/threads", chatRoutes);
 
 app.get("/api/me", (c) => {
   const { user } = c.get("session");

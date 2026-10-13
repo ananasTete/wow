@@ -2,5 +2,10 @@ pre-commit:
   jobs:
     - name: biome check staged files
       glob: "*.{js,cjs,mjs,jsx,ts,cts,mts,tsx,json,jsonc}"
-      run: pnpm exec biome check --write {staged_files}
+      run: pnpm exec biome check --write --unsafe {staged_files}
       stage_fixed: true
+
+commit-msg:
+  jobs:
+    - name: commitlint
+      run: pnpm exec commitlint --edit {1}

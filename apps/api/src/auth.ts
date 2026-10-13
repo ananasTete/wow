@@ -1,10 +1,8 @@
-import { createDb, schema } from "@wow/db";
+import { schema } from "@wow/db";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
-const db = await createDb(
-  process.env.DATABASE_URL ? { url: process.env.DATABASE_URL } : {},
-);
+import { db } from "./db";
 
 export const auth = betterAuth({
   basePath: "/auth",

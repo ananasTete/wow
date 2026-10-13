@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -87,3 +89,55 @@ export const agentRun = pgTable("agent_run", {
   tokensUsed: integer("tokens_used"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * 对话会话。threadId 由前端生成（延迟创建：首条消息时才落库），
+ * 列表按 lastMessageAt 倒序 + keyset 分页（(lastMessageAt, id) 复合游标）。
+ */
+export const chatThread = pgTable(
+  "chat_thread",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default("新对话"),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("chat_thread_user_last_idx").on(
+      table.userId,
+      table.lastMessageAt.desc(),
+      table.id.desc(),
+    ),
+  ],
+);
+
+/**
+ * 对话消息。parts 原样存 UIMessage["parts"]（AI SDK v7 格式），
+ * 前端取回零转换直接交给 useChat / Streamdown 渲染。
+ */
+export const chatMessage = pgTable(
+  "chat_message",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => chatThread.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    parts: jsonb("parts").notNull(),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("chat_message_thread_created_idx").on(
+      table.threadId,
+      table.createdAt.desc(),
+      table.id.desc(),
+    ),
+  ],
+);
