@@ -1,4 +1,5 @@
 import { Agent } from "@mastra/core/agent";
+import { memory } from "../memory";
 import { model } from "../provider";
 import { tavilySearchTool } from "../tools/tavily-search";
 
@@ -16,4 +17,5 @@ export const wowAgent = new Agent({
   ].join("\n"),
   model,
   tools: { tavilySearch: tavilySearchTool },
+  memory,
 });

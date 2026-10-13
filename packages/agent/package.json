@@ -13,6 +13,7 @@
   "dependencies": {
     "@ai-sdk/openai-compatible": "catalog:",
     "@mastra/core": "catalog:",
+    "@mastra/libsql": "catalog:",
     "@mastra/memory": "catalog:",
     "@mastra/pg": "catalog:",
     "@t3-oss/env-core": "catalog:",
