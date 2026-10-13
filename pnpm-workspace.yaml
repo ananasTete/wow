@@ -1,0 +1,7 @@
+packages:
+  - apps/*
+  - packages/*
+
+catalog:
+  "@t3-oss/env-core": ^0.13.0
+  zod: ^4.1.0
