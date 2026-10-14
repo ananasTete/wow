@@ -195,6 +195,7 @@
 - **原因**：`useSignOut` onSuccess 里先 `qc.clear()` 后 `navigate()`——clear 时侧栏（ChatShell）仍挂载，`useThreadList`/`useSession` 的 observer 还活着。query-core 5.x 的 `clear()` 把 query 从缓存移除并 destroy；组件下一次渲染（mutation 状态翻转、路由状态更新都必然触发）时 observer 走 `#updateQuery()` 重建空 query 并立即 `#executeFetch()`——等于带着已销毁的会话主动重发一轮请求，401 还会再触发会话过期拦截器。
 - **解决**：调换顺序——`await navigate({ to: "/login" })` 完成后（TanStack Router 的 navigate promise 在**新路由渲染完成、旧组件卸载后**才 resolve，见 router-core 的 `_commitPromise` 在 `startTransition` 后 resolve）再 `qc.clear()`，此时已无活跃 observer，清缓存零副作用。main.tsx 的会话过期处理器（401 → 清缓存 + 跳登录）是同一模式，同步改为 `navigate(...).then(() => queryClient.clear())`。教训：`queryClient.clear()/removeQueries()` 只能在相关查询**无挂载 observer** 时调用（导航卸载之后），否则等于主动触发一轮全量 refetch。
 - **同族变体（2026-10，删除会话后多发一次已删会话的详情 GET）**：mutation hook 的 onSuccess 里 `invalidateQueries(detail(id))` 时 ChatScreen 的 observer 仍挂载（导航在组件级 onSuccess 里才发出，且 mutate 是异步的），invalidate 默认 `refetchType: "active"` 立即触发在挂 observer 重取。当失效意图只是"作废缓存"而非"立刻刷新视图"时，用 `refetchType: "none"` 只标 stale 不重取——无多余请求，后续新 observer 挂载时自然重取。
+
 ### shadcn Charts 容器选择器在 recharts 3.10 下刻度失灵（图表主题化改造时踩到，2026-10）
 
 - **现象**：接入 shadcn `ui/chart.tsx`（new-york-v4 registry，recharts 3 兼容版）后，网格线成功变 `border/50`，但坐标轴刻度文字仍是 recharts 默认 `#666`，`fill-muted-foreground` 没生效。
@@ -206,4 +207,12 @@
 - **现象**：`evaluate` 里对 `.recharts-wrapper` 派发 `mousemove`/`pointermove`（bubbles: true），Tooltip 和 cursor 始终不出现；CUA `move` 真实移动鼠标立即触发。
 - **原因**：recharts 的 hover 激活路径对事件有额外要求（合成 `dispatchEvent` 的 `isTrusted: false` 事件走不通），属 IAB 合成事件局限的又一变体（同族：press 失灵、focus 不触发 onBlur）。
 - **解决**：验证 hover 用 `tab.cua.move({ x, y })` 移真实鼠标，坐标从截图里量。
+
+### 新机器上登录/注册一律 500（本地库未迁移，2026-10）
+
+- **现象**：换一台机器 clone 后直接 `pnpm dev`，`POST /auth/sign-in/email` 稳定 500（响应体为空），`/auth/get-session` 却正常 200——极像代码坏了，其实代码没动过。
+- **原因**：`.data/pg` 在 gitignore 里不随仓库走；API 启动时 `createDb` 会自动 `mkdirSync` + `PGlite.create` 初始化出一个**零表裸库**，而建表靠独立的手动步骤 `pnpm --filter @wow/db migrate`（API 启动不自动迁移，仓库也没有 README 提醒）。better-auth 登录第一条 SQL 查 `user` 表 → `relation "user" does not exist` → 500。旧机器正常是因为当初跑过迁移且数据目录留存。
+- **排查手段**：① 错误密码当探针——库健康应 401 INVALID_EMAIL_OR_PASSWORD，500 即 DB 层炸了；② 看 `.data/pg/base/5/` 里有没有 OID ≥ 16384 的关系文件（用户表都在这个区间，全小于即无用户表）；③ 隔离复现：`createDb({ dataDir: "/tmp/..." })` + `migrate()` + 同款 betterAuth 配置跑 signUpEmail/signInEmail，证明代码无恙。
+- **解决**：`pnpm --filter @wow/db migrate` 建表。**踩坑补充**：对运行中的 API 建表后接口仍 500——API 进程是建表前打开的库，内嵌 postgres 看不到另一个进程后来创建的表，必须重启 API。不要杀用户终端里的进程，`touch apps/api/src/index.ts` 触发 tsx watch 自身重启即可（零杀进程、终端不乱）。重启后 401 恢复正常。
+- **连带提醒**：迁移只建表不搬数据，旧账号在旧机器的本地库里，新机器需重新注册。
 
