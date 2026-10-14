@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
+import axios from "axios";
 import { SparklesIcon } from "lucide-react";
 import { useRef } from "react";
 import {
@@ -41,7 +42,7 @@ export function ChatScreen({
   // 取挂载瞬间的快照：草稿在首条消息后落库，但本实例不回头拉历史
   // （进行中的消息以 useChat 本地状态为准），也避免标志翻转把活动对话重挂载
   const draftAtMount = useRef(isDraft).current;
-  const { data, isPending, isError } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: chatKeys.messages(threadId),
     queryFn: () => fetchThreadMessages(threadId),
     staleTime: Infinity, // 历史只作初始消息，活动期间以 useChat 本地状态为准
@@ -62,13 +63,22 @@ export function ChatScreen({
   }
 
   if (isError) {
-    // 兜底：路由守卫已拦截绝大多数 404（不存在/非本人），这里只兜"校验通过后瞬间被删"的边界
+    // 404（不存在/非本人统一）原地空态，不跳转：URL 如实反映所指向会话的状态
+    const threadGone = axios.isAxiosError(error) && error.response?.status === 404;
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3">
-        <p className="text-muted-foreground">会话不存在或已被删除</p>
-        <Button asChild>
-          <Link to="/">返回主页</Link>
-        </Button>
+        <p className="text-muted-foreground">
+          {threadGone ? "会话不存在或已被删除" : "会话加载失败，请稍后重试"}
+        </p>
+        {threadGone ? (
+          <Button asChild>
+            <Link to="/">返回主页</Link>
+          </Button>
+        ) : (
+          <Button onClick={() => void refetch()} variant="outline">
+            重试
+          </Button>
+        )}
       </div>
     );
   }

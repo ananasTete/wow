@@ -32,8 +32,11 @@
   （queryClient 由 main.tsx 注入 router context，类型经 `createRootRouteWithContext` 声明）探 `/api/me`，
   未登录 `redirect` 到 `/login?next=<location.href>`；`/login` 反向守卫探 `/auth/get-session`（**不能走 /api/***，
   否则会触发 axios 401 拦截器把登录页自己弹走）。`next` 必须经 `safeNext` 白名单（只收站内相对路径）防开放重定向。
-  `/chat/$threadId` 的 beforeLoad 预取消息做归属校验（404 → `/?notice=thread_not_found` + toast），
-  但要跳过"threadId === 当前草稿 id"的场景（草稿落库与导航并发，见 store.ts）。
+  `/chat/$threadId` **不做路由级归属校验**：404（不存在/非本人统一）由 ChatScreen 的消息查询承接，
+  原地渲染"会话不存在或已被删除"空态 + 返回主页链接，不跳转、不发 toast——URL 如实反映所指向会话的状态，
+  且与"聊天中会话被删"的原地 alert 语义一致（曾做过 redirect + `?notice=` + toast 方案后移除：
+  为跨路由传一条提示引入四个间接件，成本高于收益）。若未来重新给该路由加 beforeLoad 预取，
+  注意草稿首发与落库并发的 404 竞态（比对 `draftThreadId` 跳过）。
   会话过期统一出口在 axios 拦截器 → `lib/session-expired.ts` 回调（main.tsx 注册），避免 axios↔router 循环依赖。
 
 ## 问题与解决方案
@@ -156,7 +159,7 @@
 
 ### 登录重构落地：路由守卫 + next 回跳 + 越权 404（2026-10）
 
-- **改动概览**：`/login` 独立路由（validateSearch 声明 `next?` 可选键——**键必须带 `?`**，否则所有 `to="/"`、`to:"/login"` 的导航/链接都被 TS 强制要求传 search）；`_chat` 布局 beforeLoad 守卫（fetchQuery `/api/me`，失败 redirect `/login?next=location.href`）；`/login` 反向守卫探 `/auth/get-session`；`/chat/$threadId` beforeLoad 预取消息，404 → redirect `/?notice=thread_not_found`（replace，死链不留历史栈）；toast 用 zustand 手写（`stores/toast.ts` + `components/ui/toaster.tsx`），不引 sonner。
+- **改动概览**：`/login` 独立路由（validateSearch 声明 `next?` 可选键——**键必须带 `?`**，否则所有 `to="/"`、`to:"/login"` 的导航/链接都被 TS 强制要求传 search）；`_chat` 布局 beforeLoad 守卫（fetchQuery `/api/me`，失败 redirect `/login?next=location.href`）；`/login` 反向守卫探 `/auth/get-session`。**迭代**：`/chat/$threadId` 的越权 404 初版做"redirect 回主页 + notice 参数 + toast"，后按需求方意见改为 ChatScreen 原地空态（见前端约定），notice/toast 机制整体移除——教训：为"跨路由传一条提示"引入的间接层（search 参数、全局 Toaster、渲染后清参）成本远超收益，能原地展示的就原地展示。
 - **踩坑 1（类型）**：`createFileRoute` 的 beforeLoad 里 `context.queryClient` 报"不存在 on {}"——文件路由的 context 类型**不来自 Register**，必须用 `createRootRouteWithContext<{ queryClient: QueryClient }>()` 在 `__root.tsx` 声明。
 - **踩坑 2（并发竞态）**：草稿首发消息时 `navigate({ to: "/chat/$threadId" })` 与服务端落库并发，beforeLoad 的消息预取可能赶在落库前拿到 404 把人踢回主页。解法：守卫开头比对 `useChatStore.getState().draftThreadId === params.threadId` 则跳过校验（活动实例已接管渲染）。
 - **踩坑 3（拦截器误伤）**：登录页反向守卫若用 `/api/me` 探测，401 会触发 axios 拦截器的"会话过期跳转"，把登录页自己弹去 `/login?next=/login`。解法：探测走 better-auth 原生 `/auth/get-session`（200 + null 表示未登录，不匹配拦截器的 `/api/*` 前缀）；拦截器也要排除已在 /login 的场景。
