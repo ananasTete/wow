@@ -24,6 +24,12 @@ import { WeatherCard, WeatherCardSkeleton } from "./weather-card";
 
 type Part = UIMessage["parts"][number];
 
+/** 工具名（tool- 后的部分）→ 展示名；旧名 tavilySearch 为重命名前的历史消息 */
+const TOOL_TITLES: Record<string, string> = {
+  webSearch: "网络搜索",
+  tavilySearch: "网络搜索",
+};
+
 /**
  * 单条消息渲染：parts 分发表（text / reasoning / 天气工具 / 通用工具）。
  * text part 内嵌的 <chart> 标签由 Streamdown allowedTags 通道交给 ChartRenderer。
@@ -86,7 +92,7 @@ function PartView({ part }: { part: Part }) {
       <Tool>
         <ToolHeader
           state={toolPart.state as ToolUIPart["state"]}
-          title={part.type.replace("tool-", "")}
+          title={TOOL_TITLES[part.type.slice(5)] ?? part.type.replace("tool-", "")}
           type={part.type as `tool-${string}`}
         />
         <ToolContent>

@@ -81,7 +81,7 @@ export const weatherTool = createTool({
   id: "get-weather",
   description:
     "查询指定城市的实时天气与未来 7 天预报。用户问天气、气温、穿衣建议、空气质量时使用。" +
-    "仅支持中国主要城市；输入城市中文名（如：上海）。",
+    "仅支持中国主要城市；输入城市中文名（如：上海）。返回数据已完整覆盖此类问题，无需联网搜索补充。",
   inputSchema: z.object({
     city: z.string().describe("城市中文名，如：上海、北京"),
   }),

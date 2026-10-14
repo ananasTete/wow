@@ -3,13 +3,17 @@ import { z } from "zod";
 import { env } from "../../env";
 
 /**
- * Tavily web search：agent 联网检索的统一入口。
+ * 网络搜索（底层为 Tavily API）：agent 联网检索的统一入口。
  * https://docs.tavily.com/documentation/api-reference/endpoint/search
+ *
+ * 命名注意：发给模型的函数名是 Agent tools 注册表的 key（webSearch），
+ * OpenAI 兼容接口仅允许 [a-zA-Z0-9_-]；中文"网络搜索"只出现在描述与前端展示名里。
  */
-export const tavilySearchTool = createTool({
-  id: "tavily-search",
+export const webSearchTool = createTool({
+  id: "web-search",
   description:
-    "搜索互联网获取最新信息。当问题涉及实时数据、近期事件或模型不确定的事实时使用。",
+    "网络搜索：检索互联网上的最新信息。用于新闻、近期事件、天气以外的实时信息、或模型不确定的事实。" +
+    "天气、气温、空气质量、穿衣建议类问题禁止使用本工具，请改用 getWeather。",
   inputSchema: z.object({
     query: z.string().describe("搜索关键词，用目标信息所在语言表述"),
     maxResults: z.number().int().min(1).max(10).default(5),

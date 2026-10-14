@@ -89,3 +89,9 @@
   - trustedOrigins 默认用端口通配符 `http://localhost:*,http://127.0.0.1:*,http://[::1]:*`（better-auth 的 `matchesOriginPattern` 支持 glob，`*` 匹配除 `/` 外任意字符）；生产用 `TRUSTED_ORIGINS` 覆盖为真实前端域名。
   - 前端按 better-auth 错误码映射文案——重复邮箱的实际错误码是 `USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL`（不是 `USER_ALREADY_EXISTS`），未知错误透传服务端 message，不再瞎猜原因。
   - 验证 origin 校验的技巧：用"错误密码登录"当探针，origin 被拦返回 403，放行则返回 401（INVALID_EMAIL_OR_PASSWORD），不会产生测试数据。
+
+### agent 问天气时先调天气工具、又叠加 tavily 搜索
+
+- **现象**：问"上海天气怎么样"，agent 先调 get-weather 输出一段文本，再调 tavily-search 又输出一段，最后才给图表；天气数据明明已够，还多花一次搜索。
+- **原因**：系统指令规则重叠——"涉及实时信息先用 tavily-search 并附来源链接"与"涉及天气先用 get-weather"同时命中（天气⊂实时信息），模型为满足全部指令把两条都执行；且"附来源链接"只有搜索工具能兑现（天气工具无 url 字段），tavily 工具描述里的"实时数据"又构成双重暗示。图表规范与此无关（`<chart>` 只是输出语法，不依赖任何工具）。
+- **解决**：指令改为互斥路由（天气只走 getWeather、禁止叠加搜索、无需来源链接；新闻/天气以外的实时信息才走 webSearch 并附链接），搜索工具描述显式排除天气。注意：OpenAI 兼容接口的函数名仅允许 `[a-zA-Z0-9_-]`，中文"网络搜索"只能放工具描述与前端展示名（`message-view.tsx` 的 TOOL_TITLES 映射，含旧名 tavilySearch 的历史消息兼容）。
