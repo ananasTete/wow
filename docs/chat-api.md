@@ -11,6 +11,7 @@
 | 标题：首条消息落库时截断命名 | AI SDK 的 SSE 协议没有 title 语义事件（最接近的通道是 `message-metadata`，但业界标准做法是流外处理）。服务端在首条 user 消息入库的同一事务里用其纯文本前 20 字符生成标题，零成本零延迟。将来升级 LLM 起名只改服务端，契约不变。 |
 | 会话内消息全量返回（无分页） | 单会话消息量与聊天上下文同量级（模型窗口也就 40 条），分页收益低、状态复杂。模型上下文窗口（40 条）是服务端内部裁剪，不影响 API 返回。 |
 | 非本人与不存在统一 404 | 防止会话 id 枚举探测。 |
+| 全局搜索用 ILIKE + jsonb EXISTS，不上全文索引 | `%kw%` 前缀通配本就无法走 btree（需 pg_trgm 才有索引可谈），个人应用量级 seq scan 足够；正文匹配限定 `parts` 里 `type="text"` 的 part，避免命中 tool output / reasoning。无新列新索引，零 migration。 |
 
 ## 数据结构
 
@@ -56,6 +57,27 @@ GET /api/threads?limit=20&cursor=<nextCursor>
 ```
 
 - 前端消费：`useInfiniteQuery`，`getNextPageParam: (last) => last.nextCursor`
+
+### 全局搜索
+
+```
+GET /api/threads/search?q=<关键字>&limit=20
+```
+
+- `q`：trim 后 1–100 字；`limit`：1–50，默认 20。zod 校验失败 400。
+- 匹配范围：`chat_thread.title` ILIKE，或任一消息 `parts` 中 `type="text"` part 的文本 ILIKE（不区分大小写；关键字中的 `%` `_` `\` 会被转义为字面量）。标题与正文命中按会话去重，按 `(lastMessageAt, id)` DESC 截 limit（无分页游标）。
+- 响应：
+
+```json
+{
+  "items": [
+    { "id": "uuid", "title": "上海天气怎么样", "snippet": "…前 30 字「上海」后 90 字…" }
+  ]
+}
+```
+
+- `snippet`：取该会话**最早命中消息**的纯文本（`extractText`，空白折叠），定位关键词后截「前 30 字 + 关键词 + 后 90 字」，越界补 `…`；仅标题命中时回退为首条消息开头（120 字截断）；无文本正文（纯 tool 消息）为空串。关键词加粗由前端渲染（服务端只回纯文本，无 HTML 注入面）。
+- 前端消费：`useThreadSearch`（`useQuery` + 300ms 防抖 + `keepPreviousData`），弹窗为 cmdk `shouldFilter={false}`（过滤完全由服务端承担），⌘K/Ctrl+K 唤起。
 
 ### 会话增删改
 
@@ -112,8 +134,9 @@ POST /api/threads/:id/messages   （发消息，SSE 流式响应）
   - SSE 发消息（真实模型调用）：标准 UI message stream 事件序列（`start` → `text-delta`…）
   - 延迟创建：前端生成 threadId 首跳成功 upsert；标题自动截断为「用一句话解释什么是SSE流式传输」
   - 落库回读：user + assistant 双消息正序返回
-  - 防枚举：跨用户读/写他人会话均 404
-  - 多轮上下文：第二跳模型准确复述第一跳问题（历史组装生效）
+- 防枚举：跨用户读/写他人会话均 404
+- 多轮上下文：第二跳模型准确复述第一跳问题（历史组装生效）
+- 全局搜索（curl + UI，2026-10）：标题命中加粗（"测试会话 1" → 10 条且排序正确）；正文命中 snippet 按关键词定位（前 30/后 90 字符 + 越界 `…`，实测字符索引换算一致，关键词挤在 20 字自动标题之外时标题不命中仅正文命中）；大小写不敏感（`quantum sailing` ↔ `Quantum Sailing`）；`%` 通配符转义（`q=100%` 空结果不报错）；空 `q` 400；标题与正文同时命中按会话去重；仅标题命中时 snippet 回退首条消息开头、无消息为空串（UI 不渲染摘要行）。UI：⌘K/Ctrl+K 与侧边栏按钮唤起、300ms 防抖（keepPreviousData 不闪空态）、Enter 跳转 + 关闭即清空关键词、收起态按钮 opacity-0 + pointer-events-none + tabIndex -1。
 
 ## 已知约束（本地开发）
 

@@ -3,7 +3,7 @@ import axios from "axios";
 
 import { api } from "#/lib/axios";
 
-/** 会话消息全量拉取（正序，直接作为 useChat 的 initialMessages）；草稿会话 404 视为空 */
+/** 会话消息全量拉取（正序，直接作为 useChat 的 initialMessages）；404（如会话已在他处被删）兜底视为空 */
 export async function fetchThreadMessages(
   threadId: string,
 ): Promise<MessageListResponse> {

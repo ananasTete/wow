@@ -18,9 +18,11 @@ import {
   ToolOutput,
 } from "#/components/ai-elements/tool";
 import { tolerantParse } from "../lib/tolerant-parse";
-import type { ChartSpec, WeatherOutput } from "../types";
+import type { ChartSpec, WeatherOutput, WebSearchResult } from "../types";
 import { ChartRenderer, ChartSkeleton } from "./chart-renderer";
+import { type CitationMap, CitationTagRenderer } from "./citation-tag";
 import { WeatherCard, WeatherCardSkeleton } from "./weather-card";
+import { WebSearchToolView } from "./web-search-tool-view";
 
 type Part = UIMessage["parts"][number];
 
@@ -30,31 +32,85 @@ const TOOL_TITLES: Record<string, string> = {
   tavilySearch: "网络搜索",
 };
 
+/** 本消息里出现过的搜索工具 part 类型（含旧名 tavilySearch 的历史消息） */
+const SEARCH_TOOL_PARTS = new Set(["tool-webSearch", "tool-tavilySearch"]);
+
 /**
- * 单条消息渲染：parts 分发表（text / reasoning / 天气工具 / 通用工具）。
- * text part 内嵌的 <chart> 标签由 Streamdown allowedTags 通道交给 ChartRenderer。
+ * 汇总本消息全部搜索结果为「引用编号 → 结果」表，供正文 <citation> 查找。
+ * 旧数据无 index 字段时按结果出现顺序补号（1..n）。
  */
-export function MessageView({ message }: { message: UIMessage }) {
+function collectCitations(parts: Part[]): CitationMap {
+  const map: CitationMap = new Map();
+  let fallback = 1;
+  for (const part of parts) {
+    if (!SEARCH_TOOL_PARTS.has(part.type)) continue;
+    // Set.has 无法窄化联合类型，工具 part 的字段经断言访问
+    const { state, output } = part as {
+      state?: string;
+      output?: { results?: WebSearchResult[] };
+    };
+    if (state !== "output-available") continue;
+    const results = output?.results;
+    if (!Array.isArray(results)) continue;
+    for (const r of results) {
+      const index = typeof r.index === "number" ? r.index : fallback++;
+      map.set(index, { ...r, index });
+    }
+  }
+  return map;
+}
+
+/**
+ * 单条消息渲染：parts 分发表（text / reasoning / 天气工具 / 搜索工具 / 通用工具）。
+ * text part 内嵌的 <chart>/<citation> 标签由 Streamdown allowedTags 通道渲染。
+ */
+export function MessageView({
+  message,
+  threadId,
+}: {
+  message: UIMessage;
+  threadId: string;
+}) {
+  const citations = collectCitations(message.parts);
   return (
     <Message from={message.role}>
       <MessageContent>
         {message.parts.map((part, i) => (
-          <PartView key={i} part={part} />
+          <PartView citations={citations} key={i} part={part} threadId={threadId} />
         ))}
       </MessageContent>
     </Message>
   );
 }
 
-function PartView({ part }: { part: Part }) {
-  // 文本（含内嵌 <chart> DSL）
+/** 自闭合 citation → 显式闭合。HTML 解析对非 void 元素忽略 "/>"，
+ *  不规范化的话 <citation i="1" /> 会被当开放标签，把后续内容嵌套进去 */
+const SELF_CLOSING_CITATION = /<citation i="?(\d+)"?\s*\/>/g;
+
+function normalizeCitations(text: string): string {
+  return text.replace(SELF_CLOSING_CITATION, '<citation i="$1"></citation>');
+}
+
+function PartView({
+  part,
+  citations,
+  threadId,
+}: {
+  part: Part;
+  citations: CitationMap;
+  threadId: string;
+}) {
+  // 文本（含内嵌 <chart> DSL 与 <citation> 引用标注）
   if (part.type === "text") {
     return (
       <MessageResponse
-        allowedTags={{ chart: ["charttype", "title"] }}
-        components={{ chart: ChartTagRenderer }}
+        allowedTags={{ chart: ["charttype", "title"], citation: ["i"] }}
+        components={{
+          chart: ChartTagRenderer,
+          citation: (props) => CitationTagRenderer(props, citations),
+        }}
       >
-        {part.text}
+        {normalizeCitations(part.text)}
       </MessageResponse>
     );
   }
@@ -78,6 +134,29 @@ function PartView({ part }: { part: Part }) {
       return <p className="text-destructive text-sm">天气查询失败：{part.errorText}</p>;
     }
     return <WeatherCardSkeleton />;
+  }
+
+  // 搜索工具：行内状态条，完成后点击打开右侧结果面板（旧名 tavilySearch 同结构）
+  if (SEARCH_TOOL_PARTS.has(part.type)) {
+    const toolPart = part as Part & {
+      toolCallId: string;
+      state: string;
+      input?: { query?: string };
+      output?: { results?: WebSearchResult[] };
+      errorText?: string;
+    };
+    return (
+      <WebSearchToolView
+        part={{
+          toolCallId: toolPart.toolCallId,
+          state: toolPart.state,
+          input: toolPart.input,
+          output: toolPart.output,
+          errorText: toolPart.errorText,
+        }}
+        threadId={threadId}
+      />
+    );
   }
 
   // 其他工具：通用 JSON 展示

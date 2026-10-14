@@ -42,3 +42,11 @@ export interface ChartSpec {
   yAxisMin?: number;
   data: Array<Record<string, string | number>>;
 }
+
+/** webSearch 单条结果（与 packages/agent/src/tools/web-search.ts 的 outputSchema 对齐） */
+export interface WebSearchResult {
+  index: number;
+  title: string;
+  url: string;
+  content: string;
+}

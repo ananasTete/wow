@@ -1,4 +1,8 @@
-import type { ThreadListResponse, ThreadSummary } from "@wow/shared";
+import type {
+  ThreadListResponse,
+  ThreadSearchResponse,
+  ThreadSummary,
+} from "@wow/shared";
 
 import { api } from "#/lib/axios";
 
@@ -9,6 +13,14 @@ export async function fetchThreads(opts: {
   const params = new URLSearchParams({ limit: String(opts.limit ?? 20) });
   if (opts.cursor) params.set("cursor", opts.cursor);
   return api.get<unknown, ThreadListResponse>(`/api/threads?${params}`);
+}
+
+export async function searchThreads(
+  q: string,
+  limit = 20,
+): Promise<ThreadSearchResponse> {
+  const params = new URLSearchParams({ q, limit: String(limit) });
+  return api.get<unknown, ThreadSearchResponse>(`/api/threads/search?${params}`);
 }
 
 export async function createThread(title?: string): Promise<ThreadSummary> {

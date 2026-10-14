@@ -1,6 +1,7 @@
 import {
   createThreadRequestSchema,
   threadListQuerySchema,
+  threadSearchQuerySchema,
   updateThreadRequestSchema,
 } from "@wow/shared";
 import { Hono } from "hono";
@@ -11,6 +12,7 @@ import {
   createThread,
   deleteThread,
   listThreads,
+  searchThreads,
   ThreadNotFoundError,
   updateThread,
 } from "../lib/chat-store";
@@ -18,6 +20,7 @@ import {
 /**
  * 会话列表 CRUD：/api/threads
  * GET    /            列表（置顶段全量 + 普通段 keyset cursor 分页）
+ * GET    /search      全局搜索（标题 + 消息正文关键字）
  * POST   /            预建会话（延迟创建模式下前端通常不调）
  * PATCH  /:id         重命名 / 置顶 / 取消置顶
  * DELETE /:id         删除（消息级联）
@@ -34,6 +37,23 @@ threadsRoutes.get("/", async (c) => {
   }
   const { user } = c.get("session");
   const result = await listThreads({ userId: user.id, ...query.data });
+  return c.json(result);
+});
+
+threadsRoutes.get("/search", async (c) => {
+  const query = threadSearchQuerySchema.safeParse(c.req.query());
+  if (!query.success) {
+    return c.json(
+      { error: "invalid_request", details: z.treeifyError(query.error) },
+      400,
+    );
+  }
+  const { user } = c.get("session");
+  const result = await searchThreads({
+    userId: user.id,
+    q: query.data.q,
+    limit: query.data.limit,
+  });
   return c.json(result);
 });
 

@@ -1,6 +1,18 @@
 import { schema } from "@wow/db";
-import type { ThreadMessage, ThreadSummary } from "@wow/shared";
-import { and, desc, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
+import type { ThreadMessage, ThreadSearchResponse, ThreadSummary } from "@wow/shared";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import { db } from "../db";
 
@@ -107,6 +119,102 @@ export async function listThreads(opts: {
     pinned: pinnedRows.map(toSummary),
     items: page.map(toSummary),
     nextCursor: hasMore && last ? `${last.lastMessageAt.toISOString()}|${last.id}` : null,
+  };
+}
+
+/** ILIKE 通配符转义（PG 默认转义符为反斜杠） */
+const escapeLike = (s: string) => s.replace(/[\\%_]/g, "\\$&");
+
+/** 消息任一 text part 命中关键字的条件（参数化绑定，无注入风险） */
+const textPartLike = (pattern: string) =>
+  sql`EXISTS (SELECT 1 FROM jsonb_array_elements(${chatMessage.parts}) p WHERE p->>'type' = 'text' AND p->>'text' ILIKE ${pattern})`;
+
+/** 搜索摘要：命中位置前 30 字 + 关键词 + 后 90 字，越界补省略号；未命中回退开头 120 字 */
+function buildSnippet(text: string, q: string): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  const idx = normalized.toLowerCase().indexOf(q.toLowerCase());
+  if (idx === -1) {
+    return normalized.length <= 120 ? normalized : `${normalized.slice(0, 120)}…`;
+  }
+  const start = Math.max(0, idx - 30);
+  const end = Math.min(normalized.length, idx + q.length + 90);
+  return `${start > 0 ? "…" : ""}${normalized.slice(start, end)}${end < normalized.length ? "…" : ""}`;
+}
+
+/**
+ * 全局搜索：标题 ILIKE 命中，或任一消息 text part 命中（jsonb 展开匹配）。
+ * 标题与正文命中按会话去重（单表查询），按 lastMessageAt DESC 截 limit。
+ * snippet 取每个会话最早命中消息的关键词上下文；仅标题命中时回退首条消息开头。
+ */
+export async function searchThreads(opts: {
+  userId: string;
+  q: string;
+  limit: number;
+}): Promise<ThreadSearchResponse> {
+  const { userId, q, limit } = opts;
+  const pattern = `%${escapeLike(q)}%`;
+
+  const threads = await db
+    .select()
+    .from(chatThread)
+    .where(
+      and(
+        eq(chatThread.userId, userId),
+        or(
+          ilike(chatThread.title, pattern),
+          sql`EXISTS (SELECT 1 FROM ${chatMessage} WHERE ${chatMessage.threadId} = ${chatThread.id} AND ${textPartLike(pattern)})`,
+        ),
+      ),
+    )
+    .orderBy(desc(chatThread.lastMessageAt), desc(chatThread.id))
+    .limit(limit);
+
+  if (threads.length === 0) return { items: [] };
+  const threadIds = threads.map((t) => t.id);
+
+  const messageCols = {
+    threadId: chatMessage.threadId,
+    parts: chatMessage.parts,
+    createdAt: chatMessage.createdAt,
+    id: chatMessage.id,
+  };
+
+  // 每个命中会话的最早命中消息（正文 snippet 来源）
+  const matchedRows = await db
+    .select(messageCols)
+    .from(chatMessage)
+    .where(and(inArray(chatMessage.threadId, threadIds), textPartLike(pattern)))
+    .orderBy(asc(chatMessage.createdAt), asc(chatMessage.id));
+  const firstMatched = new Map<string, string>();
+  for (const row of matchedRows) {
+    if (!firstMatched.has(row.threadId)) {
+      firstMatched.set(row.threadId, extractText(row.parts as ThreadMessage["parts"]));
+    }
+  }
+
+  // 仅标题命中的会话：回退为首条消息开头
+  const fallbackIds = threadIds.filter((id) => !firstMatched.has(id));
+  const firstMessage = new Map<string, string>();
+  if (fallbackIds.length > 0) {
+    const rows = await db
+      .select(messageCols)
+      .from(chatMessage)
+      .where(inArray(chatMessage.threadId, fallbackIds))
+      .orderBy(asc(chatMessage.createdAt), asc(chatMessage.id));
+    for (const row of rows) {
+      if (!firstMessage.has(row.threadId)) {
+        firstMessage.set(row.threadId, extractText(row.parts as ThreadMessage["parts"]));
+      }
+    }
+  }
+
+  return {
+    items: threads.map((t) => ({
+      id: t.id,
+      title: t.title,
+      snippet: buildSnippet(firstMatched.get(t.id) ?? firstMessage.get(t.id) ?? "", q),
+    })),
   };
 }
 

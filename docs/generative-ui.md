@@ -127,13 +127,32 @@ ChatGPT 在回复中输出的是这样的语法（真实片段截取）：
 
 一句话对比：**ChatGPT 的 DSL 是「为自家解析器和自家模型定制的私有协议」；我们把它改写成「标准 HTML 标签 + 标签体 JSON」，语法表达力等价，但每一层都落在标准解析器和 streamdown 的承诺范围内。**
 
+## 方案 B'：引用标注 → `<citation>` 内联标签（webSearch 配套）
+
+webSearch 的结果引用走 text part 内联标签（与 chart 同一 streamdown 通道，但形态相反）：
+
+```markdown
+导致美国柴油价格上涨<citation i="1" />，主要受炼厂检修影响<citation i="3" />。
+```
+
+与 `<chart>` 的三点差异（提示词 `prompts/citation.ts` 已固化）：
+
+1. **内联而非块级**：`<citation>` 出现在段落句子中间，前后**不能**留空行（空行会把一段话拆成多个段落）；chart 是 flow 块必须留空行——两条规则相反，别混用。
+2. **无标签体**：自闭合 `<citation i="1" />`，唯一属性 `i` 是搜索结果的引用编号，从 `node.properties.i` 读取（字符串，HTML 解析小写化对单字母属性无影响）。**注意**：HTML 规范的自闭合斜杠只对 void 元素生效，parse5 会把 `<citation />` 当开放标签导致后续内容嵌套进第一个胶囊——前端 `normalizeCitations` 在交给 streamdown 前统一替换成 `<citation i="N"></citation>` 显式闭合（模型两种写法都兼容）。
+3. **数据跨 part 引用**：胶囊本体在 text part，hover 气泡内容来自同消息 `tool-webSearch` part 的 output。编号由工具侧分配（不是模型自己数）：`webSearch` 输出每条结果带 `index`，多次搜索用输入参数 `startIndex` 接续，保证全文编号唯一；前端 `MessageView` 把全部搜索结果汇总成 `Map<index, result>` 注入渲染器。查不到编号时降级为静态胶囊（无 hover）。
+
+前端渲染：`MessageResponse` 的 `allowedTags={{ citation: ["i"] }}` + `components.citation` → `CitationTag`（胶囊 + HoverCard 气泡，side="top"）。
+
 ## 已落地内容
 
 | 文件 | 内容 |
 |---|---|
 | `packages/agent/src/tools/weather.ts` | 方案 A 示例：天气 tool（outputSchema + 魅族免费天气接口 + 城市码映射） |
 | `packages/agent/src/prompts/chart.ts` | 方案 B 的内置提示词：`<chart>` 语法规范与使用规则 |
-| `packages/agent/src/agents/wow.ts` | 注册 `getWeather`，instructions 拼入天气路由规则与图表规范 |
+| `packages/agent/src/prompts/citation.ts` | 方案 B' 的内置提示词：`<citation>` 引用标注规范 |
+| `packages/agent/src/tools/web-search.ts` | webSearch tool：结果带全局引用编号 `index`（`startIndex` 接续） |
+| `apps/web/src/features/chat/components/citation-tag.tsx` | 引用胶囊 + hover 来源气泡（HoverCard） |
+| `packages/agent/src/agents/wow.ts` | 注册 `getWeather`/`webSearch`，instructions 拼入路由规则、图表规范与引用规范 |
 
 验证方式：`pnpm agent` 起 Mastra Studio（localhost:4111）直接对话——问天气触发 tool（Studio 里看 JSON 输出），问「用图表对比 X 和 Y」检查模型输出的 `<chart>` 块语法合规性（Studio 里显示为原始标签文本，正好用来肉眼校验 JSON）。
 

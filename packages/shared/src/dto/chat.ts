@@ -52,6 +52,26 @@ export const updateThreadRequestSchema = z
     message: "至少提供 title 或 pinned 之一",
   });
 
+/** 全局搜索查询参数：q 为标题/正文共用关键字 */
+export const threadSearchQuerySchema = z.object({
+  q: z.string().trim().min(1).max(100),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+/** 搜索结果项：snippet 为命中消息正文的关键词上下文截取（仅标题命中时为首条消息开头，可为空串） */
+export const threadSearchItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  snippet: z.string(),
+});
+export type ThreadSearchItem = z.infer<typeof threadSearchItemSchema>;
+
+/** 搜索响应：按 lastMessageAt DESC，标题与正文命中按会话去重 */
+export const threadSearchResponseSchema = z.object({
+  items: z.array(threadSearchItemSchema),
+});
+export type ThreadSearchResponse = z.infer<typeof threadSearchResponseSchema>;
+
 /** 历史消息（= UIMessage + createdAt） */
 export const threadMessageSchema = z.object({
   id: z.string(),
