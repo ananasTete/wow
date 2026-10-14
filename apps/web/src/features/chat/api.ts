@@ -1,13 +1,11 @@
-import type { MessageListResponse } from "@wow/shared";
+import type { ThreadDetail } from "@wow/shared";
 
 import { api } from "#/lib/axios";
 
 /**
- * 会话消息全量拉取（正序，直接作为 useChat 的 initialMessages）。
- * 404（不存在/非本人）不再吞成空列表：由 /chat/:id 路由守卫统一重定向 + toast。
+ * 会话详情：元信息（标题/置顶等，header 消费）+ 全量消息（useChat initialMessages）。
+ * 404（不存在/非本人）由 ChatScreen 承接为原地空态。
  */
-export async function fetchThreadMessages(
-  threadId: string,
-): Promise<MessageListResponse> {
-  return api.get<unknown, MessageListResponse>(`/api/threads/${threadId}/messages`);
+export async function fetchThreadDetail(threadId: string): Promise<ThreadDetail> {
+  return api.get<unknown, ThreadDetail>(`/api/threads/${threadId}`);
 }

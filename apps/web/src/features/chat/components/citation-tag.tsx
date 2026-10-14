@@ -56,15 +56,18 @@ export function SiteIcon({
 }
 
 /** 单条搜索结果的展示结构（域名行 + 标题 + 两行摘要），citation 气泡与侧边栏共用。
- *  整个条目即链接（大点击区域），标题在 hover 时下划线暗示可点 */
-export function SearchResultItem({ result }: { result: WebSearchResult }) {
-  return (
-    <a
-      className="flex flex-col gap-1.5 underline-offset-2 hover:[&_span[data-title]]:underline"
-      href={result.url}
-      rel="noreferrer"
-      target="_blank"
-    >
+ *  linked=false（citation hover 气泡）：纯展示，不跳转；
+ *  linked=true（侧边栏）：整条即链接（大点击区域），标题在 hover 时下划线暗示可点。
+ *  文本一律正常前景色，靠字重区分标题与摘要 */
+export function SearchResultItem({
+  result,
+  linked,
+}: {
+  result: WebSearchResult;
+  linked: boolean;
+}) {
+  const content = (
+    <>
       <div className="flex min-w-0 items-center gap-1.5">
         <SiteIcon className="text-muted-foreground size-3.5 shrink-0" result={result} />
         <p className="text-muted-foreground truncate text-xs">{hostOf(result.url)}</p>
@@ -73,6 +76,19 @@ export function SearchResultItem({ result }: { result: WebSearchResult }) {
         {result.title}
       </span>
       <p className="line-clamp-2 text-sm">{result.content}</p>
+    </>
+  );
+  if (!linked) {
+    return <div className="flex flex-col gap-1.5">{content}</div>;
+  }
+  return (
+    <a
+      className="text-foreground flex flex-col gap-1.5 underline-offset-2 hover:[&_span[data-title]]:underline"
+      href={result.url}
+      rel="noreferrer"
+      target="_blank"
+    >
+      {content}
     </a>
   );
 }
@@ -110,7 +126,7 @@ export function CitationTag({
         </a>
       </HoverCardTrigger>
       <HoverCardContent align="start" className="w-80" side="top">
-        <SearchResultItem result={result} />
+        <SearchResultItem linked={false} result={result} />
       </HoverCardContent>
     </HoverCard>
   );

@@ -178,9 +178,21 @@
 - **现象**：浏览器自动化点侧栏用户菜单里的"退出登录"，Playwright 的 click 对 menuitem 一直 timeout（动画冻结 + actionability 检查不过）；先点开菜单再找 menuitem 时菜单又已被关掉。
 - **解决**：在**同一个 evaluate 里完成**：对 trigger 按钮先 `dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))` 再 `click()`（Radix DropdownMenuTrigger 靠 pointerdown 打开），等 500ms 后对 menuitem 同样 pointerdown + click。拆成两次 locator 调用必失败。
 
+### IAB 补充：evaluate 里 el.focus() 不触发 React onBlur（会话 header 编辑验证时踩到，2026-10）
+
+- **现象**：自动化验证"blur 退出编辑不提交"——对另一个输入框 `evaluate((el) => el.focus())` 后，焦点确实移走（`activeElement` 已变），但编辑态组件的 React `onBlur` 没执行，输入框仍渲染。与 press("Enter") 失灵同类：该环境对部分焦点/键盘事件的派发路径不完整。
+- **解决**：验证 blur 语义时手动 `el.dispatchEvent(new FocusEvent("focusout", { bubbles: true }))`（React 的 onBlur 监听冒泡的 focusout）；验证 Enter 时 `dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))`。真实浏览器不受影响（侧栏重命名同模式久经使用）。
+
+### Radix portal 内的点击会沿 React 树冒泡回宿主行（侧栏菜单误触进入会话，2026-10）
+
+- **现象**：侧栏会话行（div[role=button] + 行级 onClick 进入会话）里嵌 DropdownMenu，点菜单项"重命名/删除"时**同时**触发了进入会话详情。
+- **原因**：Radix 菜单/弹窗内容 DOM 上挂在 body portal，但 **React 合成事件沿 React 组件树冒泡**（portal 只隔离 DOM 不隔离 React 事件）——`DropdownMenuContent`、`DialogContent` 的 React 父级仍是宿主行 div，click/keydown 冒泡到行级 handler。原来只给触发按钮加了 `stopPropagation`，覆盖不到面板内容。
+- **解决**：两层处理——①操作区容器 div 统一 `onClick/onKeyDown` stopPropagation（菜单面板在它的 React 子树内，一次拦截全部）；②`DeleteThreadDialog` 移出行 div（fragment 兄弟节点），彻底脱离冒泡路径。教训：portal 组件只要 React 祖先上有交互 handler，就必须在两者之间断掉合成事件冒泡，给 trigger 加 stopPropagation 是不够的。
+
 ### 登出后多发 /api/threads 与 /api/me（queryClient.clear 触发活跃 observer 立即重发，2026-10）
 
 - **现象**：点"退出登录"跳到登录页后，Network 里多出 `/api/threads?limit=20` 和 `/api/me` 两个必 401 的请求（`/auth/get-session` 是登录页反向守卫，正常）。
 - **原因**：`useSignOut` onSuccess 里先 `qc.clear()` 后 `navigate()`——clear 时侧栏（ChatShell）仍挂载，`useThreadList`/`useSession` 的 observer 还活着。query-core 5.x 的 `clear()` 把 query 从缓存移除并 destroy；组件下一次渲染（mutation 状态翻转、路由状态更新都必然触发）时 observer 走 `#updateQuery()` 重建空 query 并立即 `#executeFetch()`——等于带着已销毁的会话主动重发一轮请求，401 还会再触发会话过期拦截器。
 - **解决**：调换顺序——`await navigate({ to: "/login" })` 完成后（TanStack Router 的 navigate promise 在**新路由渲染完成、旧组件卸载后**才 resolve，见 router-core 的 `_commitPromise` 在 `startTransition` 后 resolve）再 `qc.clear()`，此时已无活跃 observer，清缓存零副作用。main.tsx 的会话过期处理器（401 → 清缓存 + 跳登录）是同一模式，同步改为 `navigate(...).then(() => queryClient.clear())`。教训：`queryClient.clear()/removeQueries()` 只能在相关查询**无挂载 observer** 时调用（导航卸载之后），否则等于主动触发一轮全量 refetch。
+- **同族变体（2026-10，删除会话后多发一次已删会话的详情 GET）**：mutation hook 的 onSuccess 里 `invalidateQueries(detail(id))` 时 ChatScreen 的 observer 仍挂载（导航在组件级 onSuccess 里才发出，且 mutate 是异步的），invalidate 默认 `refetchType: "active"` 立即触发在挂 observer 重取。当失效意图只是"作废缓存"而非"立刻刷新视图"时，用 `refetchType: "none"` 只标 stale 不重取——无多余请求，后续新 observer 挂载时自然重取。
 

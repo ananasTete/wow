@@ -5,7 +5,7 @@ import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
 import axios from "axios";
 import { SparklesIcon } from "lucide-react";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -22,15 +22,16 @@ import { Button } from "#/components/ui/button";
 import { Spinner } from "#/components/ui/spinner";
 import { threadKeys } from "#/features/threads/query-keys";
 
-import { fetchThreadMessages } from "../api";
-import { chatKeys } from "../query-keys";
+import { fetchThreadDetail } from "../api";
 import { ChatErrorAlert } from "./chat-error-alert";
+import { ChatHeader } from "./chat-header";
 import { MessageView } from "./message-view";
 
 /**
- * 右侧对话主区：历史拉取 → useChat（SSE）→ Conversation 容器渲染。
+ * 右侧对话主区：详情拉取（header 元信息 + initialMessages）→ useChat（SSE）→ 渲染。
  * 以 threadId 为 key 挂载，切换会话即重建（initialMessages 语义正确）。
- * 草稿会话（isDraft）服务端尚不存在，跳过历史查询直接进空对话。
+ * 草稿会话（isDraft）服务端尚不存在，跳过详情查询直接进空对话；
+ * 首条消息完成（落库）后启用查询，header 标题由服务端截断命名接管。
  */
 export function ChatScreen({
   threadId,
@@ -42,16 +43,35 @@ export function ChatScreen({
   // 取挂载瞬间的快照：草稿在首条消息后落库，但本实例不回头拉历史
   // （进行中的消息以 useChat 本地状态为准），也避免标志翻转把活动对话重挂载
   const draftAtMount = useRef(isDraft).current;
+  // 草稿落库信号：flip 后详情查询启用，header 拿到真实标题（早退分支不感知 isPending）
+  const [threadLanded, setThreadLanded] = useState(false);
   const { data, isPending, isError, error, refetch } = useQuery({
-    queryKey: chatKeys.messages(threadId),
-    queryFn: () => fetchThreadMessages(threadId),
+    queryKey: threadKeys.detail(threadId),
+    queryFn: () => fetchThreadDetail(threadId),
     staleTime: Infinity, // 历史只作初始消息，活动期间以 useChat 本地状态为准
-    enabled: !draftAtMount, // 草稿会话未落库，请求必然 404
+    enabled: !draftAtMount || threadLanded, // 草稿会话未落库，请求必然 404
     retry: false,
   });
 
   if (draftAtMount) {
-    return <ChatScreenInner initialMessages={[]} isDraftMount threadId={threadId} />;
+    return (
+      <div className="flex h-full min-h-0 flex-1 flex-col">
+        {/* header 只属于会话详情页：草稿落库（URL 已切 /chat/:id、详情就绪）后才渲染 */}
+        {threadLanded && data !== undefined && (
+          <ChatHeader
+            pinned={data.pinnedAt != null}
+            threadId={threadId}
+            title={data.title}
+          />
+        )}
+        <ChatScreenInner
+          initialMessages={[]}
+          isDraftMount
+          onThreadLanded={() => setThreadLanded(true)}
+          threadId={threadId}
+        />
+      </div>
+    );
   }
 
   if (isPending) {
@@ -85,11 +105,18 @@ export function ChatScreen({
 
   // ThreadMessage 与 UIMessage 结构同构（parts JSONB 回读宽化），此处显式断言
   return (
-    <ChatScreenInner
-      initialMessages={(data?.data ?? []) as unknown as UIMessage[]}
-      isDraftMount={false}
-      threadId={threadId}
-    />
+    <div className="flex h-full min-h-0 flex-1 flex-col">
+      <ChatHeader
+        pinned={data.pinnedAt !== null}
+        threadId={threadId}
+        title={data.title}
+      />
+      <ChatScreenInner
+        initialMessages={data.messages as unknown as UIMessage[]}
+        isDraftMount={false}
+        threadId={threadId}
+      />
+    </div>
   );
 }
 
@@ -97,11 +124,14 @@ function ChatScreenInner({
   threadId,
   initialMessages,
   isDraftMount,
+  onThreadLanded,
 }: {
   threadId: string;
   initialMessages: UIMessage[];
   /** 本次挂载从草稿开始：会话在首条消息完成时才于服务端落库 */
   isDraftMount: boolean;
+  /** 草稿落库时通知父级启用详情查询（header 标题/菜单随之就绪） */
+  onThreadLanded?: () => void;
 }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -124,6 +154,7 @@ function ChatScreenInner({
       if (isDraftMount && !threadCreated.current) {
         threadCreated.current = true;
         qc.invalidateQueries({ queryKey: threadKeys.lists() });
+        onThreadLanded?.();
       }
     },
   });
@@ -134,7 +165,7 @@ function ChatScreenInner({
   const centered = messages.length === 0;
 
   return (
-    <div className="flex h-full flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {centered ? (
         <div className="flex-1" />
       ) : (

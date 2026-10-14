@@ -38,7 +38,7 @@ export function SearchResultsPanel({ threadId }: { threadId: string }) {
               className="border-b py-3 first:pt-1 last:border-b-0 last:pb-0"
               key={r.url}
             >
-              <SearchResultItem result={r} />
+              <SearchResultItem linked result={r} />
             </div>
           ))}
         </div>
