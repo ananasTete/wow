@@ -66,7 +66,7 @@ export function ThreadSidebar({ className }: { className?: string }) {
   return (
     <aside
       className={cn(
-        "bg-muted/40 flex h-full shrink-0 flex-col border-r transition-[width] duration-200",
+        "bg-muted/40 flex h-full shrink-0 flex-col border-r transition-[width] duration-150",
         collapsed ? "w-14" : "w-64",
         className,
       )}
@@ -77,7 +77,7 @@ export function ThreadSidebar({ className }: { className?: string }) {
         <span
           className={cn(
             "flex-1 truncate px-2 font-semibold",
-            collapsed ? "opacity-0" : "opacity-100 transition-opacity duration-200",
+            collapsed ? "opacity-0" : "opacity-100 transition-opacity duration-150",
           )}
         >
           wow
@@ -88,7 +88,7 @@ export function ThreadSidebar({ className }: { className?: string }) {
             className={cn(
               collapsed
                 ? "pointer-events-none opacity-0"
-                : "opacity-100 transition-opacity duration-200",
+                : "opacity-100 transition-opacity duration-150",
             )}
             onClick={() => setSearchOpen(true)}
             size="icon-sm"
@@ -102,7 +102,7 @@ export function ThreadSidebar({ className }: { className?: string }) {
             className={cn(
               collapsed
                 ? "pointer-events-none opacity-0"
-                : "opacity-100 transition-opacity duration-200",
+                : "opacity-100 transition-opacity duration-150",
             )}
             onClick={() => setCollapsed(true)}
             size="icon-sm"
@@ -117,7 +117,7 @@ export function ThreadSidebar({ className }: { className?: string }) {
           className={cn(
             "absolute left-3",
             collapsed
-              ? "opacity-100 transition-opacity duration-200"
+              ? "opacity-100 transition-opacity duration-150"
               : "pointer-events-none opacity-0",
           )}
           onClick={() => setCollapsed(false)}
@@ -144,7 +144,7 @@ export function ThreadSidebar({ className }: { className?: string }) {
           <span
             className={cn(
               "truncate",
-              collapsed ? "opacity-0" : "opacity-100 transition-opacity duration-200",
+              collapsed ? "opacity-0" : "opacity-100 transition-opacity duration-150",
             )}
           >
             新建对话
@@ -155,7 +155,7 @@ export function ThreadSidebar({ className }: { className?: string }) {
       {collapsed ? (
         <div className="flex-1" />
       ) : (
-        <div className="animate-in fade-in flex-1 space-y-0.5 overflow-y-auto px-2 pb-4 duration-200">
+        <div className="animate-in fade-in flex-1 space-y-0.5 overflow-y-auto px-2 pb-4 duration-150">
           {isPending ? (
             <div className="flex justify-center py-8">
               <Spinner className="text-muted-foreground size-5" />
@@ -201,7 +201,7 @@ export function ThreadSidebar({ className }: { className?: string }) {
                 </div>
               )}
               {!hasNextPage && threads.length > 0 && (
-                <p className="text-muted-foreground py-3 text-center text-xs whitespace-nowrap">
+                <p className="text-muted-foreground py-3 text-center text-xs truncate">
                   共 {pinned.length + threads.length} 个会话
                 </p>
               )}
@@ -226,7 +226,7 @@ export function ThreadSidebar({ className }: { className?: string }) {
                     "min-w-0 flex-1 text-left",
                     collapsed
                       ? "opacity-0"
-                      : "opacity-100 transition-opacity duration-200",
+                      : "opacity-100 transition-opacity duration-150",
                   )}
                 >
                   <span className="block truncate text-sm font-medium">{me.name}</span>
