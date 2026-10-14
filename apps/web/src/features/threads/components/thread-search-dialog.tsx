@@ -72,7 +72,7 @@ export function ThreadSearchDialog({
             placeholder="搜索会话标题或内容…"
             value={keyword}
           />
-          <CommandList className="max-h-[420px]">
+          <CommandList className="h-[380px] overflow-y-auto">
             {q.length === 0 ? (
               <p className="text-muted-foreground py-6 text-center text-sm">
                 输入关键词搜索会话标题与正文

@@ -76,31 +76,19 @@ export function ThreadSidebar({ className }: { className?: string }) {
       <div className="relative flex items-center justify-between px-2 pt-2">
         <span
           className={cn(
-            "flex-1 truncate px-2 font-semibold transition-opacity duration-150",
-            collapsed ? "opacity-0" : "opacity-100",
+            "flex-1 truncate px-2 font-semibold",
+            collapsed ? "opacity-0" : "opacity-100 transition-opacity duration-200",
           )}
         >
           wow
         </span>
         <div className="flex items-center gap-0.5">
           <Button
-            aria-label="收起侧边栏"
-            className={cn(
-              "transition-opacity duration-150",
-              collapsed ? "pointer-events-none opacity-0" : "opacity-100",
-            )}
-            onClick={() => setCollapsed(true)}
-            size="icon-sm"
-            tabIndex={collapsed ? -1 : 0}
-            variant="ghost"
-          >
-            <PanelLeftCloseIcon className="size-4" />
-          </Button>
-          <Button
             aria-label="搜索会话"
             className={cn(
-              "transition-opacity duration-150",
-              collapsed ? "pointer-events-none opacity-0" : "opacity-100",
+              collapsed
+                ? "pointer-events-none opacity-0"
+                : "opacity-100 transition-opacity duration-200",
             )}
             onClick={() => setSearchOpen(true)}
             size="icon-sm"
@@ -109,12 +97,28 @@ export function ThreadSidebar({ className }: { className?: string }) {
           >
             <SearchIcon className="size-4" />
           </Button>
+          <Button
+            aria-label="收起侧边栏"
+            className={cn(
+              collapsed
+                ? "pointer-events-none opacity-0"
+                : "opacity-100 transition-opacity duration-200",
+            )}
+            onClick={() => setCollapsed(true)}
+            size="icon-sm"
+            tabIndex={collapsed ? -1 : 0}
+            variant="ghost"
+          >
+            <PanelLeftCloseIcon className="size-4" />
+          </Button>
         </div>
         <Button
           aria-label="展开侧边栏"
           className={cn(
-            "absolute left-1/2 -translate-x-1/2 transition-opacity duration-150",
-            collapsed ? "opacity-100" : "pointer-events-none opacity-0",
+            "absolute left-3",
+            collapsed
+              ? "opacity-100 transition-opacity duration-200"
+              : "pointer-events-none opacity-0",
           )}
           onClick={() => setCollapsed(false)}
           size="icon-sm"
@@ -139,8 +143,8 @@ export function ThreadSidebar({ className }: { className?: string }) {
           <SquarePenIcon className="size-4 shrink-0" />
           <span
             className={cn(
-              "truncate transition-opacity duration-150",
-              collapsed ? "opacity-0" : "opacity-100",
+              "truncate",
+              collapsed ? "opacity-0" : "opacity-100 transition-opacity duration-200",
             )}
           >
             新建对话
@@ -151,7 +155,7 @@ export function ThreadSidebar({ className }: { className?: string }) {
       {collapsed ? (
         <div className="flex-1" />
       ) : (
-        <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-4">
+        <div className="animate-in fade-in flex-1 space-y-0.5 overflow-y-auto px-2 pb-4 duration-200">
           {isPending ? (
             <div className="flex justify-center py-8">
               <Spinner className="text-muted-foreground size-5" />
@@ -160,7 +164,7 @@ export function ThreadSidebar({ className }: { className?: string }) {
             <>
               {pinned.length > 0 && (
                 <>
-                  <p className="px-2 pt-2 pb-1 text-muted-foreground text-xs font-medium">
+                  <p className="px-2 pt-2 pb-1 text-muted-foreground text-xs font-medium whitespace-nowrap">
                     已置顶
                   </p>
                   {pinned.map((t) => (
@@ -174,7 +178,7 @@ export function ThreadSidebar({ className }: { className?: string }) {
                       thread={t}
                     />
                   ))}
-                  <p className="px-2 pt-3 pb-1 text-muted-foreground text-xs font-medium">
+                  <p className="px-2 pt-3 pb-1 text-muted-foreground text-xs font-medium whitespace-nowrap">
                     会话
                   </p>
                 </>
@@ -197,7 +201,7 @@ export function ThreadSidebar({ className }: { className?: string }) {
                 </div>
               )}
               {!hasNextPage && threads.length > 0 && (
-                <p className="py-3 text-center text-muted-foreground text-xs">
+                <p className="text-muted-foreground py-3 text-center text-xs whitespace-nowrap">
                   共 {pinned.length + threads.length} 个会话
                 </p>
               )}
@@ -219,8 +223,10 @@ export function ThreadSidebar({ className }: { className?: string }) {
               {me && (
                 <span
                   className={cn(
-                    "min-w-0 flex-1 text-left transition-opacity duration-150",
-                    collapsed ? "opacity-0" : "opacity-100",
+                    "min-w-0 flex-1 text-left",
+                    collapsed
+                      ? "opacity-0"
+                      : "opacity-100 transition-opacity duration-200",
                   )}
                 >
                   <span className="block truncate text-sm font-medium">{me.name}</span>
