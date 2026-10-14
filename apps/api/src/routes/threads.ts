@@ -31,7 +31,11 @@ threadsRoutes.get("/", async (c) => {
   const query = threadListQuerySchema.safeParse(c.req.query());
   if (!query.success) {
     return c.json(
-      { error: "invalid_request", details: z.treeifyError(query.error) },
+      {
+        code: "INVALID_REQUEST",
+        message: "请求参数错误",
+        details: z.treeifyError(query.error),
+      },
       400,
     );
   }
@@ -44,7 +48,11 @@ threadsRoutes.get("/search", async (c) => {
   const query = threadSearchQuerySchema.safeParse(c.req.query());
   if (!query.success) {
     return c.json(
-      { error: "invalid_request", details: z.treeifyError(query.error) },
+      {
+        code: "INVALID_REQUEST",
+        message: "请求参数错误",
+        details: z.treeifyError(query.error),
+      },
       400,
     );
   }
@@ -60,7 +68,14 @@ threadsRoutes.get("/search", async (c) => {
 threadsRoutes.post("/", async (c) => {
   const body = createThreadRequestSchema.safeParse(await c.req.json().catch(() => null));
   if (!body.success) {
-    return c.json({ error: "invalid_request", details: z.treeifyError(body.error) }, 400);
+    return c.json(
+      {
+        code: "INVALID_REQUEST",
+        message: "请求参数错误",
+        details: z.treeifyError(body.error),
+      },
+      400,
+    );
   }
   const { user } = c.get("session");
   const thread = await createThread({ userId: user.id, title: body.data.title });
@@ -70,7 +85,14 @@ threadsRoutes.post("/", async (c) => {
 threadsRoutes.patch("/:id", async (c) => {
   const body = updateThreadRequestSchema.safeParse(await c.req.json().catch(() => null));
   if (!body.success) {
-    return c.json({ error: "invalid_request", details: z.treeifyError(body.error) }, 400);
+    return c.json(
+      {
+        code: "INVALID_REQUEST",
+        message: "请求参数错误",
+        details: z.treeifyError(body.error),
+      },
+      400,
+    );
   }
   const { user } = c.get("session");
   try {
@@ -82,7 +104,8 @@ threadsRoutes.patch("/:id", async (c) => {
     });
     return c.json(thread);
   } catch (e) {
-    if (e instanceof ThreadNotFoundError) return c.json({ error: "not_found" }, 404);
+    if (e instanceof ThreadNotFoundError)
+      return c.json({ code: "NOT_FOUND", message: "会话不存在或无权访问" }, 404);
     throw e;
   }
 });
@@ -93,7 +116,8 @@ threadsRoutes.delete("/:id", async (c) => {
     await deleteThread({ threadId: c.req.param("id"), userId: user.id });
     return c.body(null, 204);
   } catch (e) {
-    if (e instanceof ThreadNotFoundError) return c.json({ error: "not_found" }, 404);
+    if (e instanceof ThreadNotFoundError)
+      return c.json({ code: "NOT_FOUND", message: "会话不存在或无权访问" }, 404);
     throw e;
   }
 });

@@ -52,3 +52,12 @@ export async function signOut() {
 export async function fetchMe(): Promise<Me> {
   return api.get<unknown, Me>("/api/me");
 }
+
+/**
+ * better-auth 原生会话探测：走 /auth/*（不匹配 axios 401 拦截器的 /api/* 前缀，
+ * 不会在登录页反向守卫里误触发"会话过期跳转"）。无会话时接口返回 200 + null。
+ */
+export async function fetchSessionExists(): Promise<boolean> {
+  const data = await api.get<unknown, { session?: unknown } | null>("/auth/get-session");
+  return data != null && data.session != null;
+}

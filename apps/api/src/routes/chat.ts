@@ -28,7 +28,8 @@ chatRoutes.get("/:id/messages", async (c) => {
     const data = await listMessages(c.req.param("id"), user.id);
     return c.json({ data });
   } catch (e) {
-    if (e instanceof ThreadNotFoundError) return c.json({ error: "not_found" }, 404);
+    if (e instanceof ThreadNotFoundError)
+      return c.json({ code: "NOT_FOUND", message: "会话不存在或无权访问" }, 404);
     throw e;
   }
 });
@@ -36,7 +37,14 @@ chatRoutes.get("/:id/messages", async (c) => {
 chatRoutes.post("/:id/messages", async (c) => {
   const body = sendMessageRequestSchema.safeParse(await c.req.json().catch(() => null));
   if (!body.success) {
-    return c.json({ error: "invalid_request", details: z.treeifyError(body.error) }, 400);
+    return c.json(
+      {
+        code: "INVALID_REQUEST",
+        message: "请求参数错误",
+        details: z.treeifyError(body.error),
+      },
+      400,
+    );
   }
   const { user } = c.get("session");
   const threadId = c.req.param("id");
@@ -49,7 +57,8 @@ chatRoutes.post("/:id/messages", async (c) => {
       message: body.data.message,
     });
   } catch (e) {
-    if (e instanceof ThreadNotFoundError) return c.json({ error: "not_found" }, 404);
+    if (e instanceof ThreadNotFoundError)
+      return c.json({ code: "NOT_FOUND", message: "会话不存在或无权访问" }, 404);
     throw e;
   }
 

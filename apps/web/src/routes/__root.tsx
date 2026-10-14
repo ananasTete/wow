@@ -1,12 +1,16 @@
 import { TanStackDevtools } from "@tanstack/react-devtools";
-import { createRootRoute, Link, Outlet } from "@tanstack/react-router";
+import type { QueryClient } from "@tanstack/react-query";
+import { createRootRouteWithContext, Link, Outlet } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 
 import { Button } from "#/components/ui/button";
+import { Toaster } from "#/components/ui/toaster";
 
 import "../styles.css";
 
-export const Route = createRootRoute({
+// queryClient 经 main.tsx 的 createRouter({ context }) 注入，
+// 在根路由声明类型后，所有子路由 beforeLoad 的 context.queryClient 才有类型
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   component: RootComponent,
   notFoundComponent: NotFound,
 });
@@ -27,6 +31,7 @@ function RootComponent() {
   return (
     <>
       <Outlet />
+      <Toaster />
       <TanStackDevtools
         config={{
           position: "bottom-right",

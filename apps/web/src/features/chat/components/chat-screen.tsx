@@ -1,6 +1,6 @@
 import { useChat } from "@ai-sdk/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
 import { SparklesIcon } from "lucide-react";
@@ -17,6 +17,7 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
 } from "#/components/ai-elements/prompt-input";
+import { Button } from "#/components/ui/button";
 import { Spinner } from "#/components/ui/spinner";
 import { threadKeys } from "#/features/threads/query-keys";
 
@@ -40,11 +41,12 @@ export function ChatScreen({
   // 取挂载瞬间的快照：草稿在首条消息后落库，但本实例不回头拉历史
   // （进行中的消息以 useChat 本地状态为准），也避免标志翻转把活动对话重挂载
   const draftAtMount = useRef(isDraft).current;
-  const { data, isPending } = useQuery({
+  const { data, isPending, isError } = useQuery({
     queryKey: chatKeys.messages(threadId),
     queryFn: () => fetchThreadMessages(threadId),
     staleTime: Infinity, // 历史只作初始消息，活动期间以 useChat 本地状态为准
     enabled: !draftAtMount, // 草稿会话未落库，请求必然 404
+    retry: false,
   });
 
   if (draftAtMount) {
@@ -55,6 +57,18 @@ export function ChatScreen({
     return (
       <div className="flex flex-1 items-center justify-center">
         <Spinner className="size-6" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    // 兜底：路由守卫已拦截绝大多数 404（不存在/非本人），这里只兜"校验通过后瞬间被删"的边界
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3">
+        <p className="text-muted-foreground">会话不存在或已被删除</p>
+        <Button asChild>
+          <Link to="/">返回主页</Link>
+        </Button>
       </div>
     );
   }

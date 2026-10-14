@@ -1,4 +1,4 @@
-import { useParams } from "@tanstack/react-router";
+import { Outlet, useParams } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { ChatScreen, useChatStore } from "#/features/chat";
 import { ThreadSidebar } from "#/features/threads";
@@ -32,6 +32,8 @@ export function ChatShell() {
           <ChatScreen isDraft={isDraft} key={threadId} threadId={threadId} />
         </div>
         <SearchResultsPanel threadId={threadId} />
+        {/* 子路由均为占位（null）或纯逻辑组件（如首页 notice），不影响布局 */}
+        <Outlet />
       </main>
     </div>
   );

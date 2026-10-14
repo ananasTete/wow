@@ -17,7 +17,7 @@ app.all("/auth/*", (c) => auth.handler(c.req.raw));
 app.use("/api/*", async (c, next) => {
   const session = await auth.api.getSession({ headers: c.req.header() });
   if (!session) {
-    return c.json({ error: "unauthorized" }, 401);
+    return c.json({ code: "UNAUTHORIZED", message: "未登录或登录已失效" }, 401);
   }
   c.set("session", session);
   await next();

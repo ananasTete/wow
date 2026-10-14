@@ -14,6 +14,12 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 8,
   },
+  session: {
+    // 服务端会话（httpOnly cookie，无需 refresh token）：
+    // 7 天绝对上限 + 每天滑动续期一次（get-session 时自动延长），活跃用户不掉线
+    expiresIn: 60 * 60 * 24 * 7,
+    updateAge: 60 * 60 * 24,
+  },
   // 本地 web 经 vite proxy 到 api (3000)，origin 与 baseURL 不同端口，需显式信任；
   // vite 端口被占会自动跳到 5174/5175…，故用端口通配符覆盖 localhost/127.0.0.1/[::1]。
   // 生产必须用 TRUSTED_ORIGINS 覆盖为真实前端域名

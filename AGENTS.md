@@ -28,6 +28,13 @@
 - 路由：`/` 与 `/chat/:id` 的 UI 全部在 `_chat` 布局（ChatShell）渲染，两个子路由组件是 `() => null` 占位。
   这是为了 ChatScreen 实例跨路由存活（草稿首发 / → /chat/:id 时不丢流式状态、不重拉历史），
   不要把 UI 移回子路由。会话真源是 URL；zustand 只管草稿 id（落库即轮换，见 `features/chat/store.ts`）。
+- 登录鉴权走路由守卫，不要回退到组件级 AuthGate：`_chat` 布局 `beforeLoad` 用 `context.queryClient.fetchQuery`
+  （queryClient 由 main.tsx 注入 router context，类型经 `createRootRouteWithContext` 声明）探 `/api/me`，
+  未登录 `redirect` 到 `/login?next=<location.href>`；`/login` 反向守卫探 `/auth/get-session`（**不能走 /api/***，
+  否则会触发 axios 401 拦截器把登录页自己弹走）。`next` 必须经 `safeNext` 白名单（只收站内相对路径）防开放重定向。
+  `/chat/$threadId` 的 beforeLoad 预取消息做归属校验（404 → `/?notice=thread_not_found` + toast），
+  但要跳过"threadId === 当前草稿 id"的场景（草稿落库与导航并发，见 store.ts）。
+  会话过期统一出口在 axios 拦截器 → `lib/session-expired.ts` 回调（main.tsx 注册），避免 axios↔router 循环依赖。
 
 ## 问题与解决方案
 
@@ -146,4 +153,25 @@
 - **现象**：退出登录请求 `POST /auth/sign-out` 返回 415 `{"code":"UNSUPPORTED_MEDIA_TYPE","message":"Content-Type is required. Allowed types: application/json"}`。
 - **原因**：better-auth 1.7.7 要求所有 POST 必须带 `Content-Type: application/json`；前端 `api.post("/auth/sign-out")` 没传 body，axios 对无 body 的请求**不设置 Content-Type 头**，于是被 better-auth 拒收。
 - **解决**：`api.post("/auth/sign-out", {})`——传空对象让 axios 序列化并自动带上 `application/json`。经验：对 better-auth 的所有 POST（包括无参的 sign-out）都要保证有 JSON body 或显式设头。curl 验证：带头 `-H 'Content-Type: application/json' -d '{}'` 返回 200，不带则 415。
+
+### 登录重构落地：路由守卫 + next 回跳 + 越权 404（2026-10）
+
+- **改动概览**：`/login` 独立路由（validateSearch 声明 `next?` 可选键——**键必须带 `?`**，否则所有 `to="/"`、`to:"/login"` 的导航/链接都被 TS 强制要求传 search）；`_chat` 布局 beforeLoad 守卫（fetchQuery `/api/me`，失败 redirect `/login?next=location.href`）；`/login` 反向守卫探 `/auth/get-session`；`/chat/$threadId` beforeLoad 预取消息，404 → redirect `/?notice=thread_not_found`（replace，死链不留历史栈）；toast 用 zustand 手写（`stores/toast.ts` + `components/ui/toaster.tsx`），不引 sonner。
+- **踩坑 1（类型）**：`createFileRoute` 的 beforeLoad 里 `context.queryClient` 报"不存在 on {}"——文件路由的 context 类型**不来自 Register**，必须用 `createRootRouteWithContext<{ queryClient: QueryClient }>()` 在 `__root.tsx` 声明。
+- **踩坑 2（并发竞态）**：草稿首发消息时 `navigate({ to: "/chat/$threadId" })` 与服务端落库并发，beforeLoad 的消息预取可能赶在落库前拿到 404 把人踢回主页。解法：守卫开头比对 `useChatStore.getState().draftThreadId === params.threadId` 则跳过校验（活动实例已接管渲染）。
+- **踩坑 3（拦截器误伤）**：登录页反向守卫若用 `/api/me` 探测，401 会触发 axios 拦截器的"会话过期跳转"，把登录页自己弹去 `/login?next=/login`。解法：探测走 better-auth 原生 `/auth/get-session`（200 + null 表示未登录，不匹配拦截器的 `/api/*` 前缀）；拦截器也要排除已在 /login 的场景。
+- **踩坑 4（循环依赖）**：axios 拦截器需要 router 导航，直接 import router 会成环。解法：`lib/session-expired.ts` 只暴露 set/notify 回调，main.tsx 创建 router 后注册（清 queryClient + `router.navigate({ to: "/login", search: { next } })`）。
+- **登出导航**：`useSignOut` 里显式 `navigate({ to: "/login" })` 且**不带 next**——靠守卫重定向会带上 next=原会话，重新登录后弹回一个空会话，语义不对。
+
+### PGLite 数据目录 WAL 损坏（API 进程被杀后无法启动，2026-10）
+
+- **现象**：API 启动即崩，日志里是压缩过的 `RuntimeError: Aborted(). Build with -sASSERTIONS for more info.`（tsAP 终端只有一行 minified 堆栈，极难定位）。任何进程（包括独立探针脚本）打开同一数据目录都崩。
+- **定位方法**：用 `PGlite.create(dir, { debug: 1 })` 的最小脚本直连，真实原因才会打出来：`PANIC: could not locate a valid checkpoint record` / `invalid xl_info in checkpoint record`——API 进程被 SIGTERM/崩溃（tsx watch 被 kill、pnpm 外层被杀连带子进程）后 WAL 留下撕裂的 checkpoint 记录，postgres 拒绝启动。
+- **修复（标准 PostgreSQL 手段）**：① 先 `cp -r .data/pg .data/pg.bak-<date>` 备份；② 删掉陈旧锁文件 `postmaster.pid`（PGLite 里面是假 pid "-42"）；③ 用同大版本的 `pg_resetwal -f -D <数据目录>` 重置 WAL（本机没装 PG，`brew install postgresql@18` 后用 `/opt/homebrew/opt/postgresql@18/bin/pg_resetwal`；npm 的 `@embedded-postgres/darwin-arm64` 只有 initdb/pg_ctl/postgres 三个二进制，没有 resetwal）。代价：丢失最后一个 checkpoint 之后的少量事务，存量数据完好（实测 38 会话全在）。
+- **预防**：杀 dev 服务用优雅方式；API 进程加 SIGTERM 时 `await pglite.close()` 的处理器可彻底避免（待办）。同理，写完数据就 `process.exit(0)` 的临时脚本也可能触发（短查询实测未触发，长驻服务被杀必触发）。
+
+### IAB 补充：Radix DropdownMenu 触发要 pointerdown（2026-10）
+
+- **现象**：浏览器自动化点侧栏用户菜单里的"退出登录"，Playwright 的 click 对 menuitem 一直 timeout（动画冻结 + actionability 检查不过）；先点开菜单再找 menuitem 时菜单又已被关掉。
+- **解决**：在**同一个 evaluate 里完成**：对 trigger 按钮先 `dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))` 再 `click()`（Radix DropdownMenuTrigger 靠 pointerdown 打开），等 500ms 后对 menuitem 同样 pointerdown + click。拆成两次 locator 调用必失败。
 

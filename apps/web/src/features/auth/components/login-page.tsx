@@ -1,3 +1,4 @@
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button } from "#/components/ui/button";
 import {
@@ -12,54 +13,52 @@ import { Spinner } from "#/components/ui/spinner";
 import { cn } from "#/lib/utils";
 
 import { authErrorMessage } from "../api";
-import { useSession, useSignIn, useSignUp } from "../hooks/use-session";
+import { useSignIn, useSignUp } from "../hooks/use-session";
+import { safeNext } from "../lib/safe-next";
 
 /**
- * 登录门：未登录时展示登录/注册表单，已登录渲染 children。
- * 会话探测中显示全屏 loading。
+ * 登录页（/login）：登录/注册双模式表单。
+ * 登录成功跳回 next（守卫带来的来源路径，防开放重定向后回原处），无 next 回主页。
  */
-export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { isPending, isError } = useSession();
+export function LoginPage({ next }: { next?: string }) {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const navigate = useNavigate();
 
-  if (isPending) {
-    return (
-      <div className="flex min-h-svh items-center justify-center">
-        <Spinner className="size-6" />
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="flex min-h-svh items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-sm">
-          <CardHeader>
-            <CardTitle>{mode === "signin" ? "欢迎回来" : "创建账号"}</CardTitle>
-            <CardDescription>
-              {mode === "signin" ? "登录后开始对话" : "注册一个新账号"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <AuthForm mode={mode} />
-            <Button
-              className="mt-4 w-full"
-              onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-              type="button"
-              variant="ghost"
-            >
-              {mode === "signin" ? "没有账号？注册" : "已有账号？登录"}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  return <>{children}</>;
+  return (
+    <div className="flex min-h-svh items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle>{mode === "signin" ? "欢迎回来" : "创建账号"}</CardTitle>
+          <CardDescription>
+            {mode === "signin" ? "登录后开始对话" : "注册一个新账号"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AuthForm
+            mode={mode}
+            onSuccess={() => void navigate({ href: safeNext(next) })}
+          />
+          <Button
+            className="mt-4 w-full"
+            onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+            type="button"
+            variant="ghost"
+          >
+            {mode === "signin" ? "没有账号？注册" : "已有账号？登录"}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
-function AuthForm({ mode }: { mode: "signin" | "signup" }) {
+function AuthForm({
+  mode,
+  onSuccess,
+}: {
+  mode: "signin" | "signup";
+  onSuccess: () => void;
+}) {
   const signIn = useSignIn();
   const signUp = useSignUp();
   const [name, setName] = useState("");
@@ -74,10 +73,11 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
       className={cn("space-y-3")}
       onSubmit={(e) => {
         e.preventDefault();
+        const options = { onSuccess };
         if (mode === "signin") {
-          signIn.mutate({ email, password });
+          signIn.mutate({ email, password }, options);
         } else {
-          signUp.mutate({ name, email, password });
+          signUp.mutate({ name, email, password }, options);
         }
       }}
     >
