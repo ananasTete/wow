@@ -1,5 +1,10 @@
 import { schema } from "@wow/db";
-import type { ThreadMessage, ThreadSearchResponse, ThreadSummary } from "@wow/shared";
+import type {
+  ThreadDetail,
+  ThreadMessage,
+  ThreadSearchResponse,
+  ThreadSummary,
+} from "@wow/shared";
 import {
   and,
   asc,
@@ -281,11 +286,11 @@ export async function deleteThread(opts: {
   await db.delete(chatThread).where(eq(chatThread.id, opts.threadId));
 }
 
-/** 会话消息：一次全量返回（正序） */
-export async function listMessages(
+/** 会话详情：元信息 + 全量消息（正序），详情页一次取齐 */
+export async function getThreadDetail(
   threadId: string,
   userId: string,
-): Promise<ThreadMessage[]> {
+): Promise<ThreadDetail> {
   const owned = await getOwnedThread(threadId, userId);
   if (!owned) throw new ThreadNotFoundError();
   const rows = await db
@@ -293,7 +298,7 @@ export async function listMessages(
     .from(chatMessage)
     .where(eq(chatMessage.threadId, threadId))
     .orderBy(desc(chatMessage.createdAt), desc(chatMessage.id));
-  return rows.reverse().map(toMessage);
+  return { ...owned, messages: rows.reverse().map(toMessage) };
 }
 
 /**

@@ -82,11 +82,11 @@ export const threadMessageSchema = z.object({
 });
 export type ThreadMessage = z.infer<typeof threadMessageSchema>;
 
-/** 会话消息全量响应（正序，无分页） */
-export const messageListResponseSchema = z.object({
-  data: z.array(threadMessageSchema),
+/** 会话详情（详情页聚合：会话元信息 + 全量消息正序，无分页） */
+export const threadDetailSchema = threadSummarySchema.extend({
+  messages: z.array(threadMessageSchema),
 });
-export type MessageListResponse = z.infer<typeof messageListResponseSchema>;
+export type ThreadDetail = z.infer<typeof threadDetailSchema>;
 
 /** 发消息请求：只发最新一条 UIMessage，历史由服务端组装 */
 export const sendMessageRequestSchema = z.object({

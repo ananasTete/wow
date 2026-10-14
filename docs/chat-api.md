@@ -83,20 +83,23 @@ GET /api/threads/search?q=<关键字>&limit=20
 
 ```
 POST   /api/threads        body { "title"?: string /* 1–80 字 */ }            → 201 ThreadSummary
+GET    /api/threads/:id    会话详情（元信息 + 全量消息）                        → 200 ThreadDetail
 PATCH  /api/threads/:id    body { "title"?, "pinned"? }（至少一项）           → 200 ThreadSummary
 DELETE /api/threads/:id                                                      → 204（消息级联删除）
 ```
 
 - `PATCH` 语义：`title` 重命名；`pinned: true` 置顶（写当前时间为 `pinnedAt`，置顶区按此排序——最近置顶的在前），`pinned: false` 取消置顶（`pinnedAt` 置 null）
+- 路由注册顺序：`GET /:id` 必须排在 `GET /search` 之后（`/:id` 单段通配会吞掉 `search`）
 
-### 会话消息
+### 会话详情
 
 ```
-GET /api/threads/:id/messages → { "data": ThreadMessage[] }
+GET /api/threads/:id → ThreadDetail
 ```
 
-- **全量正序返回**（无分页）。`ThreadMessage = UIMessage + createdAt`。
-- 会话不存在/非本人 → 404。
+- **详情页聚合端点**：`ThreadDetail = ThreadSummary + messages`（ThreadMessage 全量正序，无分页），一次取齐 header 元信息与 `initialMessages`。
+- 会话不存在/非本人 → 404（前端原地空态）。
+- 前端消费：`threadKeys.detail(id)`，`staleTime: Infinity`（活动会话以 useChat 本地状态为准）；侧栏 hover 预取同一 key。
 
 ```
 POST /api/threads/:id/messages   （发消息，SSE 流式响应）
@@ -122,7 +125,7 @@ POST /api/threads/:id/messages   （发消息，SSE 流式响应）
 ## 前端接入清单（下轮）
 
 - `features/threads`：`api.ts`（列表/CRUD）、`query-keys.ts`、`hooks/`（useInfiniteQuery + mutations，删除后失效列表缓存）
-- `features/chat`：`useChat` transport 指向 `POST /api/threads/:id/messages`；历史初始消息来自 `GET /:id/messages` 塞进 `initialMessages`
+- `features/chat`：`useChat` transport 指向 `POST /api/threads/:id/messages`；历史初始消息与 header 元信息来自 `GET /api/threads/:id`（messages 塞进 `initialMessages`）
 - `lib/axios.ts` baseURL 已有；注意 SSE 端点走 `DefaultChatTransport`（fetch），不过 axios
 
 ## 验证记录
@@ -136,6 +139,7 @@ POST /api/threads/:id/messages   （发消息，SSE 流式响应）
   - 落库回读：user + assistant 双消息正序返回
 - 防枚举：跨用户读/写他人会话均 404
 - 多轮上下文：第二跳模型准确复述第一跳问题（历史组装生效）
+- 会话详情端点重构（2026-10）：`GET /api/threads/:id` 返回 ThreadDetail（元信息 + messages 内嵌），curl 验证预建会话空 messages、真实发消息后 user+assistant 正序内嵌、PATCH 置顶后 pinnedAt 回读一致；旧 `GET /:id/messages` 返回 404、`/search` 路由不受 `/:id` 影响（注册顺序在后）、未登录 401。UI（IAB）：草稿落库后 header 标题由服务端截断命名接管、Enter 重命名（header + 侧栏同步）、blur/focusout 只退出不提交、菜单置顶/取消置顶文案随状态翻转。
 - 全局搜索（curl + UI，2026-10）：标题命中加粗（"测试会话 1" → 10 条且排序正确）；正文命中 snippet 按关键词定位（前 30/后 90 字符 + 越界 `…`，实测字符索引换算一致，关键词挤在 20 字自动标题之外时标题不命中仅正文命中）；大小写不敏感（`quantum sailing` ↔ `Quantum Sailing`）；`%` 通配符转义（`q=100%` 空结果不报错）；空 `q` 400；标题与正文同时命中按会话去重；仅标题命中时 snippet 回退首条消息开头、无消息为空串（UI 不渲染摘要行）。UI：⌘K/Ctrl+K 与侧边栏按钮唤起、300ms 防抖（keepPreviousData 不闪空态）、Enter 跳转 + 关闭即清空关键词、收起态按钮 opacity-0 + pointer-events-none + tabIndex -1。
 
 ## 已知约束（本地开发）

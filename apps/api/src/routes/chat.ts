@@ -10,29 +10,16 @@ import type { Session } from "../auth";
 import {
   appendAssistantMessage,
   appendUserMessage,
-  listMessages,
   recentUiMessages,
   ThreadNotFoundError,
 } from "../lib/chat-store";
 
 /**
  * 会话消息：挂载于 /api/threads
- * GET  /:id/messages  全量拉取该会话消息（正序，无分页）
  * POST /:id/messages  发消息：存 user 消息 → 组装历史 → agent 流式 → SSE → onFinish 落库
+ * （历史拉取已并入 GET /api/threads/:id 会话详情）
  */
 export const chatRoutes = new Hono<{ Variables: { session: Session } }>();
-
-chatRoutes.get("/:id/messages", async (c) => {
-  const { user } = c.get("session");
-  try {
-    const data = await listMessages(c.req.param("id"), user.id);
-    return c.json({ data });
-  } catch (e) {
-    if (e instanceof ThreadNotFoundError)
-      return c.json({ code: "NOT_FOUND", message: "会话不存在或无权访问" }, 404);
-    throw e;
-  }
-});
 
 chatRoutes.post("/:id/messages", async (c) => {
   const body = sendMessageRequestSchema.safeParse(await c.req.json().catch(() => null));
