@@ -37,11 +37,14 @@ declare module "@tanstack/react-router" {
 }
 
 // 会话过期（/api/* 401，axios 拦截器上报）：清缓存 + 带当前路径回登录页。
-// 已在 /login 时忽略（登录页自己的探测请求失败不该再触发跳转）
+// 已在 /login 时忽略（登录页自己的探测请求失败不该再触发跳转）。
+// 与 useSignOut 同序：先导航（promise 在旧路由卸载后才 resolve）再清缓存，
+// 否则 clear() 会让仍挂载的查询 observer 立刻重建空 query 并重发请求（401 风暴）。
 setSessionExpiredHandler((href) => {
   if (router.state.location.pathname === "/login") return;
-  queryClient.clear();
-  void router.navigate({ to: "/login", search: { next: href } });
+  void router.navigate({ to: "/login", search: { next: href } }).then(() => {
+    queryClient.clear();
+  });
 });
 
 const rootElement = document.getElementById("app");

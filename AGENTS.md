@@ -178,3 +178,9 @@
 - **现象**：浏览器自动化点侧栏用户菜单里的"退出登录"，Playwright 的 click 对 menuitem 一直 timeout（动画冻结 + actionability 检查不过）；先点开菜单再找 menuitem 时菜单又已被关掉。
 - **解决**：在**同一个 evaluate 里完成**：对 trigger 按钮先 `dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))` 再 `click()`（Radix DropdownMenuTrigger 靠 pointerdown 打开），等 500ms 后对 menuitem 同样 pointerdown + click。拆成两次 locator 调用必失败。
 
+### 登出后多发 /api/threads 与 /api/me（queryClient.clear 触发活跃 observer 立即重发，2026-10）
+
+- **现象**：点"退出登录"跳到登录页后，Network 里多出 `/api/threads?limit=20` 和 `/api/me` 两个必 401 的请求（`/auth/get-session` 是登录页反向守卫，正常）。
+- **原因**：`useSignOut` onSuccess 里先 `qc.clear()` 后 `navigate()`——clear 时侧栏（ChatShell）仍挂载，`useThreadList`/`useSession` 的 observer 还活着。query-core 5.x 的 `clear()` 把 query 从缓存移除并 destroy；组件下一次渲染（mutation 状态翻转、路由状态更新都必然触发）时 observer 走 `#updateQuery()` 重建空 query 并立即 `#executeFetch()`——等于带着已销毁的会话主动重发一轮请求，401 还会再触发会话过期拦截器。
+- **解决**：调换顺序——`await navigate({ to: "/login" })` 完成后（TanStack Router 的 navigate promise 在**新路由渲染完成、旧组件卸载后**才 resolve，见 router-core 的 `_commitPromise` 在 `startTransition` 后 resolve）再 `qc.clear()`，此时已无活跃 observer，清缓存零副作用。main.tsx 的会话过期处理器（401 → 清缓存 + 跳登录）是同一模式，同步改为 `navigate(...).then(() => queryClient.clear())`。教训：`queryClient.clear()/removeQueries()` 只能在相关查询**无挂载 observer** 时调用（导航卸载之后），否则等于主动触发一轮全量 refetch。
+
