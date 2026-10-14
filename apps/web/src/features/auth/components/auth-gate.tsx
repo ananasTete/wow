@@ -11,6 +11,7 @@ import { Input } from "#/components/ui/input";
 import { Spinner } from "#/components/ui/spinner";
 import { cn } from "#/lib/utils";
 
+import { authErrorMessage } from "../api";
 import { useSession, useSignIn, useSignUp } from "../hooks/use-session";
 
 /**
@@ -103,11 +104,7 @@ function AuthForm({ mode }: { mode: "signin" | "signup" }) {
         type="password"
         value={password}
       />
-      {error && (
-        <p className="text-destructive text-sm">
-          {mode === "signin" ? "邮箱或密码错误" : "注册失败，邮箱可能已被使用"}
-        </p>
-      )}
+      {error && <p className="text-destructive text-sm">{authErrorMessage(error)}</p>}
       <Button className="w-full" disabled={pending} type="submit">
         {pending && <Spinner className="size-4" />}
         {mode === "signin" ? "登录" : "注册"}
