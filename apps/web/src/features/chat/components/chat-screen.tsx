@@ -19,7 +19,6 @@ import {
 } from "#/components/ai-elements/prompt-input";
 import { Spinner } from "#/components/ui/spinner";
 import { threadKeys } from "#/features/threads/query-keys";
-import { cn } from "#/lib/utils";
 
 import { fetchThreadMessages } from "../api";
 import { chatKeys } from "../query-keys";
@@ -105,11 +104,9 @@ function ChatScreenInner({
     },
   });
 
-  // 空会话：输入框垂直居中；有消息即瞬切到底部布局，切换不做位移过渡。
-  // 动画只属于 /chat/:id 页自身：输入框从上方落位、消息按角色方向入场（纯 transform+opacity）。
+  // 空会话：输入框垂直居中；有消息即瞬切到底部布局，不做任何入场/位移动画。
   // 居中靠上下 flex-1 占位实现：composer 外层两种状态下布局类不变（高度恒随内容），
-  // 否则 flex-grow 等布局属性变化会被 duration-300 隐式开启的 transition(all) 平滑插值；
-  // 根容器 overflow-hidden 则兜底所有入场动画的 transform 偏移，防止顶出视口出现页面滚动条
+  // 否则 flex-grow 等布局属性变化会被 duration-* 隐式开启的 transition(all) 平滑插值
   const centered = messages.length === 0;
 
   return (
@@ -120,18 +117,7 @@ function ChatScreenInner({
         <Conversation className="min-h-0 flex-1">
           <ConversationContent className="mx-auto w-full max-w-2xl px-4 pt-8 pb-4">
             {messages.map((m) => (
-              <div
-                className={cn(
-                  "animate-in fade-in duration-300 ease-out",
-                  // 用户消息从左下偏移一点入位（输入框方向），助手消息自下方浮入
-                  m.role === "user"
-                    ? "slide-in-from-left-4 slide-in-from-bottom-4"
-                    : "slide-in-from-bottom-4",
-                )}
-                key={m.id}
-              >
-                <MessageView message={m} threadId={threadId} />
-              </div>
+              <MessageView key={m.id} message={m} threadId={threadId} />
             ))}
             {error && <ChatErrorAlert error={error} />}
           </ConversationContent>
@@ -139,14 +125,9 @@ function ChatScreenInner({
         </Conversation>
       )}
 
-      <div
-        className={cn(
-          "mx-auto w-full max-w-2xl px-4 pb-4",
-          !centered && "animate-in fade-in slide-in-from-top-8 duration-300 ease-out",
-        )}
-      >
+      <div className="mx-auto w-full max-w-2xl px-4 pb-4">
         {centered && (
-          <div className="text-muted-foreground mb-6 flex flex-col items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <div className="text-muted-foreground mb-6 flex flex-col items-center gap-3">
             <SparklesIcon className="size-8" />
             <p className="text-lg">有什么可以帮你？</p>
           </div>
