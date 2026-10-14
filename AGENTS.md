@@ -141,3 +141,9 @@
 - **解决**：让元素在状态切换前后**布局相关类保持不变**——居中改用上下两个 `flex-1` 占位 div 实现，composer 外层两种状态下高度恒随内容（auto→auto 不可插值，天然瞬切）。教训：给挂 `duration-*` 的元素切布局类（flex/宽高/定位）前，先想 `transition(all)` 会不会把它变成可见动画。
 - **连带坑：入场动画向下偏移会顶出页面滚动条**。贴着视口底边的 composer 挂 `slide-in-from-bottom-4`（起点 translateY +16px），动画起帧把元素推出视口 → html 溢出 → 出现页面滚动条。解决：动画方向避开"向下顶出"（改 `slide-in-from-top-*` 从上方落位），并在组件根容器加 `overflow-hidden` 兜底所有 transform 偏移。tw-animate-css 的 `slide-in-from-left-*`（设 `--tw-enter-translate-x`）与 `slide-in-from-bottom-*`（设 `--tw-enter-translate-y`）是不同变量，可叠加出斜向入场（如用户消息"左下偏移入位"）。
 
+### POST /auth/sign-out 415 UNSUPPORTED_MEDIA_TYPE
+
+- **现象**：退出登录请求 `POST /auth/sign-out` 返回 415 `{"code":"UNSUPPORTED_MEDIA_TYPE","message":"Content-Type is required. Allowed types: application/json"}`。
+- **原因**：better-auth 1.7.7 要求所有 POST 必须带 `Content-Type: application/json`；前端 `api.post("/auth/sign-out")` 没传 body，axios 对无 body 的请求**不设置 Content-Type 头**，于是被 better-auth 拒收。
+- **解决**：`api.post("/auth/sign-out", {})`——传空对象让 axios 序列化并自动带上 `application/json`。经验：对 better-auth 的所有 POST（包括无参的 sign-out）都要保证有 JSON body 或显式设头。curl 验证：带头 `-H 'Content-Type: application/json' -d '{}'` 返回 200，不带则 415。
+

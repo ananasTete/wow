@@ -45,7 +45,8 @@ export async function signUp(name: string, email: string, password: string) {
 }
 
 export async function signOut() {
-  await api.post("/auth/sign-out");
+  // better-auth 要求 POST 必须带 Content-Type: application/json；无 body 时 axios 不设该头，传空对象触发
+  await api.post("/auth/sign-out", {});
 }
 
 export async function fetchMe(): Promise<Me> {
