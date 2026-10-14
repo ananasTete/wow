@@ -84,5 +84,8 @@
 ### better-auth 注册 403 "Invalid origin"（前端误报"邮箱可能已被使用"）
 
 - **现象**：`POST /auth/sign-up/email` 返回 403 `{"code":"INVALID_ORIGIN"}`；前端表单对任何注册失败都显示"注册失败，邮箱可能已被使用"，掩盖真实原因。
-- **原因**：better-auth 1.7.7 的 origin 校验（`origin-check.mjs` 的 `validateOrigin`）：非 GET 请求**带 Cookie 头**时，`Origin`（或 Referer）必须命中 trustedOrigins（含 baseURL 源）。浏览器用 `http://127.0.0.1:5173` 打开 vite 页面时，proxy 原样转发 Origin，而 trustedOrigins 只配了 `http://localhost:5173`——`localhost` 与 `127.0.0.1`/`[::1]` 对浏览器是三个不同 origin。不带 Cookie 的请求（如干净的 curl）反而不会被拦。
-- **解决**：默认信任列表补上 `http://127.0.0.1:5173`、`http://[::1]:5173`（`TRUSTED_ORIGINS` 可覆盖）；前端改为按 better-auth 错误码映射文案——重复邮箱的实际错误码是 `USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL`（不是 `USER_ALREADY_EXISTS`），未知错误透传服务端 message，不再瞎猜原因。
+- **原因**：better-auth 1.7.7 的 origin 校验（`origin-check.mjs` 的 `validateOrigin`）：非 GET 请求**带 Cookie 头**时，`Origin`（或 Referer）必须命中 trustedOrigins（含 baseURL 源）。浏览器用 `http://127.0.0.1:5173` 打开 vite 页面时，proxy 原样转发 Origin，而 trustedOrigins 只配了 `http://localhost:5173`——`localhost` 与 `127.0.0.1`/`[::1]` 对浏览器是三个不同 origin；且 vite 端口被占时会自动跳到 5174/5175…，写死端口同样会再踩坑。不带 Cookie 的请求（如干净的 curl）反而不会被拦。
+- **解决**：
+  - trustedOrigins 默认用端口通配符 `http://localhost:*,http://127.0.0.1:*,http://[::1]:*`（better-auth 的 `matchesOriginPattern` 支持 glob，`*` 匹配除 `/` 外任意字符）；生产用 `TRUSTED_ORIGINS` 覆盖为真实前端域名。
+  - 前端按 better-auth 错误码映射文案——重复邮箱的实际错误码是 `USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL`（不是 `USER_ALREADY_EXISTS`），未知错误透传服务端 message，不再瞎猜原因。
+  - 验证 origin 校验的技巧：用"错误密码登录"当探针，origin 被拦返回 403，放行则返回 401（INVALID_EMAIL_OR_PASSWORD），不会产生测试数据。

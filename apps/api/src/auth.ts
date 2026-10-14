@@ -14,11 +14,11 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 8,
   },
-  // 本地 web (5173) 经 vite proxy 到 api (3000)，origin 与 baseURL 不同端口，需显式信任；
-  // localhost / 127.0.0.1 / [::1] 三种地址访问 vite 都是同一页面，都要放行
+  // 本地 web 经 vite proxy 到 api (3000)，origin 与 baseURL 不同端口，需显式信任；
+  // vite 端口被占会自动跳到 5174/5175…，故用端口通配符覆盖 localhost/127.0.0.1/[::1]。
+  // 生产必须用 TRUSTED_ORIGINS 覆盖为真实前端域名
   trustedOrigins: (
-    process.env.TRUSTED_ORIGINS ??
-    "http://localhost:5173,http://127.0.0.1:5173,http://[::1]:5173"
+    process.env.TRUSTED_ORIGINS ?? "http://localhost:*,http://127.0.0.1:*,http://[::1]:*"
   )
     .split(",")
     .map((s) => s.trim())
