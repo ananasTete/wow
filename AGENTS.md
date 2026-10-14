@@ -195,4 +195,15 @@
 - **原因**：`useSignOut` onSuccess 里先 `qc.clear()` 后 `navigate()`——clear 时侧栏（ChatShell）仍挂载，`useThreadList`/`useSession` 的 observer 还活着。query-core 5.x 的 `clear()` 把 query 从缓存移除并 destroy；组件下一次渲染（mutation 状态翻转、路由状态更新都必然触发）时 observer 走 `#updateQuery()` 重建空 query 并立即 `#executeFetch()`——等于带着已销毁的会话主动重发一轮请求，401 还会再触发会话过期拦截器。
 - **解决**：调换顺序——`await navigate({ to: "/login" })` 完成后（TanStack Router 的 navigate promise 在**新路由渲染完成、旧组件卸载后**才 resolve，见 router-core 的 `_commitPromise` 在 `startTransition` 后 resolve）再 `qc.clear()`，此时已无活跃 observer，清缓存零副作用。main.tsx 的会话过期处理器（401 → 清缓存 + 跳登录）是同一模式，同步改为 `navigate(...).then(() => queryClient.clear())`。教训：`queryClient.clear()/removeQueries()` 只能在相关查询**无挂载 observer** 时调用（导航卸载之后），否则等于主动触发一轮全量 refetch。
 - **同族变体（2026-10，删除会话后多发一次已删会话的详情 GET）**：mutation hook 的 onSuccess 里 `invalidateQueries(detail(id))` 时 ChatScreen 的 observer 仍挂载（导航在组件级 onSuccess 里才发出，且 mutate 是异步的），invalidate 默认 `refetchType: "active"` 立即触发在挂 observer 重取。当失效意图只是"作废缓存"而非"立刻刷新视图"时，用 `refetchType: "none"` 只标 stale 不重取——无多余请求，后续新 observer 挂载时自然重取。
+### shadcn Charts 容器选择器在 recharts 3.10 下刻度失灵（图表主题化改造时踩到，2026-10）
+
+- **现象**：接入 shadcn `ui/chart.tsx`（new-york-v4 registry，recharts 3 兼容版）后，网格线成功变 `border/50`，但坐标轴刻度文字仍是 recharts 默认 `#666`，`fill-muted-foreground` 没生效。
+- **原因**：两层。① recharts 3.10 的刻度文字类名变成了 `recharts-cartesian-axis-tick-value`（挂在 `<text>` 上，父级是 `...-tick-label`），官方选择器 `[&_.recharts-cartesian-axis-tick_text]` 展开后是 `.recharts-cartesian-axis-tick text`，匹配不到新的 DOM 结构；② Tailwind 任意变体把 `_` 转成空格——`.a_b[c]` 实际编译为 `.a` 后代 `b[c]`，所以 `.recharts-cartesian-grid_line[stroke='#ccc']` 实际匹配 `.recharts-cartesian-grid` 下的 `line[stroke='#ccc']` 而仍能命中。网格"碰巧能用"正是这个机制，别被误导为选择器语法没问题。
+- **解决**：vendored 的 `ui/chart.tsx` ChartContainer 类名里补充 `[&_.recharts-cartesian-axis-tick-value]:fill-muted-foreground`（保留官方选择器便于升级 diff）。排查手法：`querySelectorAll("svg [class]")` 枚举真实类名再比对选择器，比盯着 computed style 猜更快。
+
+### IAB：合成鼠标事件触发不了 recharts Tooltip（图表视觉冒烟时踩到，2026-10）
+
+- **现象**：`evaluate` 里对 `.recharts-wrapper` 派发 `mousemove`/`pointermove`（bubbles: true），Tooltip 和 cursor 始终不出现；CUA `move` 真实移动鼠标立即触发。
+- **原因**：recharts 的 hover 激活路径对事件有额外要求（合成 `dispatchEvent` 的 `isTrusted: false` 事件走不通），属 IAB 合成事件局限的又一变体（同族：press 失灵、focus 不触发 onBlur）。
+- **解决**：验证 hover 用 `tab.cua.move({ x, y })` 移真实鼠标，坐标从截图里量。
 
