@@ -11,3 +11,4 @@ dist/
 .data/
 .mastra/
 .zcode/
+*.tsbuildinfo/
