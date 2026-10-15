@@ -135,7 +135,7 @@
 
 - **content 默认即片段非全文**：不开 `include_raw_content` 时，`results[].content` 是 query 相关提取段落纯文本（约 200-400 字，含全角空格缩进与 `...` 多片段拼接痕迹），`raw_content` 为 null。无法指定"取页面首段"——工具层 `stripMarkdown` 只做清洗（markdown 标记删除、全角空格规范化），不切段不截断完整返回；展示层截断由 hover 卡片的 line-clamp 承担。
 - **没有 favicon 字段**：result 只有 `url/title/content/score/raw_content/id`。favicon 不进 schema，前端 `SiteIcon` 直接加载 `<origin>/favicon.ico`，失败（404/不可达/畸形 URL）显示 Globe 兜底图标。曾试过 Google s2 代理（`google.com/s2/favicons?domain=<host>`）作为第一级，因部分网络不可达且与旧数据降级链路复杂而移除——单一来源 + 兜底最简。
-- 调研技巧：`.env.local` 里有真 key，直接 curl 一次 search API 看真实返回结构，比翻文档快且准。
+- 调研技巧：`.env.development` 里有真 key，直接 curl 一次 search API 看真实返回结构，比翻文档快且准。
 
 ### curl 访问本地 dev 服务返回 502 空响应（全局搜索冒烟时踩到，2026-10）
 

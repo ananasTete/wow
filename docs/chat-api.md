@@ -145,4 +145,4 @@ POST /api/threads/:id/messages   （发消息，SSE 流式响应）
 ## 已知约束（本地开发）
 
 - **PGLite 是单进程嵌入式库**：本地（未设 DATABASE_URL）时整个应用共享 `packages/db/.data/pg` 数据目录，但**同一时刻只能有一个进程打开**（api 与 mastra dev 不能同时跑、不能用脚本进程直接写库造数）。冒烟造数请走 API 本身；设 DATABASE_URL 走 postgres 后无此限制。
-- `apps/api` 现在进程内实例化 `@wow/agent`，其 env（OPENAI/TAVILY）由 `apps/api/.env.local` 提供（dev 脚本 `tsx --env-file-if-exists` 加载）。
+- `apps/api` 现在进程内实例化 `@wow/agent`，其 env（OPENAI/TAVILY）由 `apps/api/.env.development` 提供（dev 脚本 `tsx --env-file-if-exists` 加载）。
