@@ -2,17 +2,6 @@
 
 > 本文档定义 agent 回复中「超出普通 markdown」的 UI 呈现方案：已知场景的结构化卡片（方案 A）与图表（方案 B），并记录语法选型的依据——为什么不用 ChatGPT 的 `content={{...}}` 属性式 DSL。
 
-## 全景：两条通道
-
-Agent 的流式回复走 AI SDK UI message stream（SSE），前端 `useChat` 组装成 `UIMessage`。非 markdown 内容只有两条合法通道：
-
-| 通道 | 协议事件 | 前端渲染 | 适用 |
-|---|---|---|---|
-| **tool part** | `tool-input-start → tool-input-available → tool-output-available` | 按 `part.type === "tool-<注册名>"` 映射专属组件 | 结构固定的已知场景（方案 A） |
-| **text part** | `text-start → text-delta → text-end` | markdown 渲染器 + 自定义标签/围栏块 | 自由排版与图表（方案 B） |
-
-两条通道都不需要改任何传输协议。
-
 ## 方案 A：已知场景 → 专属 tool + 前端专属组件
 
 **已落地示例：天气。**
@@ -42,7 +31,7 @@ if (part.type === "tool-getWeather") {
 
 **适用判断**：UI 结构能枚举（卡片、列表、详情面板）、字段能 schema 化的场景，一律走这条。新增一个场景 = 新增一个 tool + 一个组件 + 渲染分发表加一行。
 
-## 方案 B：图表 → `<chart>` 标签块 + 通用图表组件
+## 方案 B 案例一：图表 → `<chart>` 标签块 + 通用图表组件
 
 图表不适合方案 A：图表的「数据形状」是开放的（任意 xKey/series/行数），为每种图建 tool 会爆炸。所以图表走 text part 内嵌 DSL，由模型按内置提示词（`packages/agent/src/prompts/chart.ts`，已拼入 wowAgent instructions）输出：
 
@@ -127,7 +116,7 @@ ChatGPT 在回复中输出的是这样的语法（真实片段截取）：
 
 一句话对比：**ChatGPT 的 DSL 是「为自家解析器和自家模型定制的私有协议」；我们把它改写成「标准 HTML 标签 + 标签体 JSON」，语法表达力等价，但每一层都落在标准解析器和 streamdown 的承诺范围内。**
 
-## 方案 B'：引用标注 → `<citation>` 内联标签（webSearch 配套）
+## 方案 B 案例二：引用标注 → `<citation>` 内联标签（webSearch 配套）
 
 webSearch 的结果引用走 text part 内联标签（与 chart 同一 streamdown 通道，但形态相反）：
 

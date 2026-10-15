@@ -32,9 +32,6 @@ const TOOL_TITLES: Record<string, string> = {
   tavilySearch: "网络搜索",
 };
 
-/** 本消息里出现过的搜索工具 part 类型（含旧名 tavilySearch 的历史消息） */
-const SEARCH_TOOL_PARTS = new Set(["tool-webSearch", "tool-tavilySearch"]);
-
 /**
  * 汇总本消息全部搜索结果为「引用编号 → 结果」表，供正文 <citation> 查找。
  * 旧数据无 index 字段时按结果出现顺序补号（1..n）。
@@ -43,7 +40,7 @@ function collectCitations(parts: Part[]): CitationMap {
   const map: CitationMap = new Map();
   let fallback = 1;
   for (const part of parts) {
-    if (!SEARCH_TOOL_PARTS.has(part.type)) continue;
+    if (part.type !== "tool-webSearch") continue;
     // Set.has 无法窄化联合类型，工具 part 的字段经断言访问
     const { state, output } = part as {
       state?: string;
@@ -137,7 +134,7 @@ function PartView({
   }
 
   // 搜索工具：行内状态条，完成后点击打开右侧结果面板（旧名 tavilySearch 同结构）
-  if (SEARCH_TOOL_PARTS.has(part.type)) {
+  if (part.type === "tool-webSearch") {
     const toolPart = part as Part & {
       toolCallId: string;
       state: string;
