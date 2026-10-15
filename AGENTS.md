@@ -23,6 +23,11 @@
 
 ## 前端约定
 
+- 会话列表分页：updatedAt keyset（`(updatedAt, id)` 复合游标）+ 乐观手术。**所有会话变更
+  （重命名/置顶切换/删除/发消息/草稿落库）一律走 `features/threads/lib/thread-list-cache.ts`
+  的 setQueryData 手术，禁止 invalidate `threadKeys.lists()`**——列表请求只允许首载与滚动
+  加载两种。安全性前提：手术永不触碰各页 `nextCursor`（服务端签发锚点）；被 bump 的会话
+  updatedAt 为全局最大值，必在所有锚点之前。侧栏渲染按 id 去重兜底竞态双份。
 - ICON 库统一用 `lucide-react`（版本走 pnpm catalog），具名导入 `XxxIcon` 后缀写法（如 `SquarePenIcon`），不引入其他图标库。
 - 图标尺寸在宿主元素上用 `size-*` class 显式声明（按钮内可依赖 button 变体的默认 `[&_svg]:size-4`）。
 - 路由：`/` 与 `/chat/:id` 的 UI 全部在 `_chat` 布局（ChatShell）渲染，两个子路由组件是 `() => null` 占位。
@@ -216,6 +221,12 @@
 - **解决**：`pnpm --filter @wow/db migrate` 建表。**踩坑补充**：对运行中的 API 建表后接口仍 500——API 进程是建表前打开的库，内嵌 postgres 看不到另一个进程后来创建的表，必须重启 API。不要杀用户终端里的进程，`touch apps/api/src/index.ts` 触发 tsx watch 自身重启即可（零杀进程、终端不乱）。重启后 401 恢复正常。
 - **连带提醒**：迁移只建表不搬数据，旧账号在旧机器的本地库里，新机器需重新注册。
 
+
+### drizzle-kit generate 产物导致 pnpm check 失败（updatedAt 索引迁移时踩到，2026-10）
+
+- **现象**：`drizzle-kit generate` 生成迁移后 `pnpm check` 报两个 format 错：`meta/_journal.json` 缺文件末尾换行、`meta/0003_snapshot.json` 的数组换行风格与 biome 输出不一致。
+- **原因**：drizzle-kit 自己写文件不做 biome 格式化，风格与 biome 默认输出有出入（此前提交的 snapshot 都是过了 biome 的）。
+- **解决**：生成迁移后执行 `pnpm exec biome check --write packages/db/drizzle` 再提交。
 
 ### JSX 注释写在表达式位置导致 PARSE_ERROR（侧栏动画实验时连踩两次，2026-10）
 

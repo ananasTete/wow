@@ -28,7 +28,7 @@ interface UIMessage {
 
 存储表（`packages/db/src/schema.ts`，migration `0001`）：
 
-- `chat_thread`：id（前端 UUID）、userId（FK user，级联删）、title、lastMessageAt（列表排序与 cursor 锚点）、createdAt/updatedAt。索引 `(userId, lastMessageAt DESC, id DESC)`。
+- `chat_thread`：id（前端 UUID）、userId（FK user，级联删）、title、createdAt/updatedAt（updatedAt 为唯一活动排序键与 cursor 锚点：发消息 / 重命名 / 置顶切换都会刷新，列表与搜索共用）。索引 `(userId, updatedAt DESC, id DESC)`。
 - `chat_message`：id（= UIMessage.id）、threadId（FK，级联删）、role、parts（JSONB，UIMessage parts 原样）、metadata（JSONB）、createdAt。索引 `(threadId, createdAt DESC, id DESC)`。
 
 ## API 总览
@@ -43,13 +43,13 @@ GET /api/threads?limit=20&cursor=<nextCursor>
 
 - `limit`：1–50，默认 20
 - `cursor`：首屏不传；后续传上一页返回的 `nextCursor`
-- **两段式响应**：`pinned` 为置顶段（`pinnedAt DESC` 全量返回，服务端上限 50），`items` 为普通段（排除置顶后按 `(lastMessageAt, id)` 复合游标 keyset 分页，DESC，并发插入不重不漏）。置顶段随每页重复返回，前端取首页即可
+- **两段式响应**：`pinned` 为置顶段（`pinnedAt DESC` 全量返回，服务端上限 50），`items` 为普通段（排除置顶后按 `(updatedAt, id)` 复合游标 keyset 分页，DESC，并发插入不重不漏）。置顶段随每页重复返回，前端取首页即可
 - 响应：
 
 ```json
 {
   "pinned": [
-    { "id": "uuid", "title": "上海天气怎么样", "pinnedAt": "ISO 或 null", "createdAt": "ISO", "lastMessageAt": "ISO", "updatedAt": "ISO" }
+    { "id": "uuid", "title": "上海天气怎么样", "pinnedAt": "ISO 或 null", "createdAt": "ISO", "updatedAt": "ISO" }
   ],
   "items": [ ... ],
   "nextCursor": "2026-10-13T16:00:00.000Z|uuid 或 null"
@@ -65,7 +65,7 @@ GET /api/threads/search?q=<关键字>&limit=20
 ```
 
 - `q`：trim 后 1–100 字；`limit`：1–50，默认 20。zod 校验失败 400。
-- 匹配范围：`chat_thread.title` ILIKE，或任一消息 `parts` 中 `type="text"` part 的文本 ILIKE（不区分大小写；关键字中的 `%` `_` `\` 会被转义为字面量）。标题与正文命中按会话去重，按 `(lastMessageAt, id)` DESC 截 limit（无分页游标）。
+- 匹配范围：`chat_thread.title` ILIKE，或任一消息 `parts` 中 `type="text"` part 的文本 ILIKE（不区分大小写；关键字中的 `%` `_` `\` 会被转义为字面量）。标题与正文命中按会话去重，按 `(updatedAt, id)` DESC 截 limit（与列表排序一致，无分页游标）。
 - 响应：
 
 ```json
@@ -117,7 +117,7 @@ POST /api/threads/:id/messages   （发消息，SSE 流式响应）
 }
 ```
 
-- 服务端流程：存 user 消息（延迟创建会话 + 首条截断命名 + 更新 lastMessageAt，同一事务）→ 读最近 40 条组装上下文 → `wowAgent.stream` → UI message stream 返回。
+- 服务端流程：存 user 消息（延迟创建会话 + 首条截断命名 + 更新 updatedAt，同一事务）→ 读最近 40 条组装上下文 → `wowAgent.stream` → UI message stream 返回。
 - 响应：`text/event-stream`（`x-vercel-ai-ui-message-stream: v1`），事件序列即 AI SDK 标准（`start` / `text-delta` / `tool-input-available` / `tool-output-available` / `finish` 等，详见 `docs/generative-ui.md`）。
 - assistant 消息在流 `onFinish` 后落库；落库失败只记服务端日志（流已结束，不影响客户端）。
 - 前端消费：`useChat` + `DefaultChatTransport`，`prepareSendMessagesRequest` 只带最新一条。

@@ -92,7 +92,9 @@ export const agentRun = pgTable("agent_run", {
 
 /**
  * 对话会话。threadId 由前端生成（延迟创建：首条消息时才落库）。
- * 列表两段式：置顶段（pinnedAt DESC，全量）+ 普通段（lastMessageAt DESC + keyset 分页）。
+ * 列表两段式：置顶段（pinnedAt DESC，全量）+ 普通段（updatedAt DESC + keyset 分页）。
+ * updatedAt 是唯一的活动排序键：发消息 / 重命名 / 置顶切换都会刷新它，即这些操作
+ * 都会把会话移到列表头（产品语义：最近被动过的会话在前），搜索也按它排序。
  */
 export const chatThread = pgTable(
   "chat_thread",
@@ -103,16 +105,13 @@ export const chatThread = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     title: text("title").notNull().default("新对话"),
     pinnedAt: timestamp("pinned_at", { withTimezone: true }),
-    lastMessageAt: timestamp("last_message_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    index("chat_thread_user_last_idx").on(
+    index("chat_thread_user_updated_idx").on(
       table.userId,
-      table.lastMessageAt.desc(),
+      table.updatedAt.desc(),
       table.id.desc(),
     ),
   ],

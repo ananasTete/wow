@@ -1,11 +1,12 @@
 import { useChat } from "@ai-sdk/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
+import type { ThreadSummary } from "@wow/shared";
 import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
 import axios from "axios";
 import { SparklesIcon } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -20,6 +21,11 @@ import {
 } from "#/components/ai-elements/prompt-input";
 import { Button } from "#/components/ui/button";
 import { Spinner } from "#/components/ui/spinner";
+import {
+  patchSummary,
+  summaryOf,
+  upsertTop,
+} from "#/features/threads/lib/thread-list-cache";
 import { threadKeys } from "#/features/threads/query-keys";
 
 import { fetchThreadDetail } from "../api";
@@ -45,6 +51,7 @@ export function ChatScreen({
   const draftAtMount = useRef(isDraft).current;
   // 草稿落库信号：flip 后详情查询启用，header 拿到真实标题（早退分支不感知 isPending）
   const [threadLanded, setThreadLanded] = useState(false);
+  const qc = useQueryClient();
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: threadKeys.detail(threadId),
     queryFn: () => fetchThreadDetail(threadId),
@@ -52,6 +59,12 @@ export function ChatScreen({
     enabled: !draftAtMount || threadLanded, // 草稿会话未落库，请求必然 404
     retry: false,
   });
+
+  // 详情数据到位（草稿落库后首拉 / header 改名合并）→ 原地纠偏列表条目，无列表请求。
+  // 条目不在已加载列表中（如搜索打开的旧会话）时为无害 no-op，不会误插入
+  useEffect(() => {
+    if (data) patchSummary(qc, summaryOf(data));
+  }, [data, qc]);
 
   if (draftAtMount) {
     return (
@@ -65,6 +78,7 @@ export function ChatScreen({
           />
         )}
         <ChatScreenInner
+          baseSummary={data ? summaryOf(data) : undefined}
           initialMessages={[]}
           isDraftMount
           onThreadLanded={() => setThreadLanded(true)}
@@ -112,6 +126,7 @@ export function ChatScreen({
         title={data.title}
       />
       <ChatScreenInner
+        baseSummary={summaryOf(data)}
         initialMessages={data.messages as unknown as UIMessage[]}
         isDraftMount={false}
         threadId={threadId}
@@ -124,18 +139,21 @@ function ChatScreenInner({
   threadId,
   initialMessages,
   isDraftMount,
+  baseSummary,
   onThreadLanded,
 }: {
   threadId: string;
   initialMessages: UIMessage[];
   /** 本次挂载从草稿开始：会话在首条消息完成时才于服务端落库 */
   isDraftMount: boolean;
+  /** 会话元信息快照（非草稿挂载必传；草稿挂载在落库且详情就绪后才有）：发消息时乐观置顶用 */
+  baseSummary?: ThreadSummary;
   /** 草稿落库时通知父级启用详情查询（header 标题/菜单随之就绪） */
   onThreadLanded?: () => void;
 }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  // 落库只发生一次：首个 onFinish 刷新侧栏（新会话出现），后续消息不再触发列表请求
+  // 落库只发生一次：首个 onFinish 乐观插入侧栏（新会话出现），后续消息不再处理列表
   const threadCreated = useRef(false);
   // 草稿首发后只切一次 URL（/ → /chat/:id）
   const urlNavigated = useRef(false);
@@ -150,10 +168,18 @@ function ChatScreenInner({
     }),
     messages: initialMessages,
     onFinish: () => {
-      // 草稿首条消息完成 = 会话刚落库，侧栏需出现新条目；仅此一次失效列表
+      // 草稿首条消息完成 = 会话刚落库：临时 summary 置顶插入侧栏（标题"新对话"，
+      // 详情就绪后由父级 patchSummary 纠偏），不失效列表
       if (isDraftMount && !threadCreated.current) {
         threadCreated.current = true;
-        qc.invalidateQueries({ queryKey: threadKeys.lists() });
+        const now = new Date().toISOString();
+        upsertTop(qc, {
+          id: threadId,
+          title: "新对话",
+          pinnedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        });
         onThreadLanded?.();
       }
     },
@@ -192,6 +218,13 @@ function ChatScreenInner({
             const text = message.text?.trim();
             if (!text) return;
             sendMessage({ text });
+            // 服务端在 POST 落地即写 user 消息并刷新 updatedAt，客户端镜像同一时刻
+            // 把会话顶到列表头（未加载过的会话 = 合成插入）。草稿落库前无 baseSummary，
+            // 插入时机由 onFinish 承接
+            if (baseSummary) {
+              const now = new Date().toISOString();
+              upsertTop(qc, { ...baseSummary, updatedAt: now });
+            }
             // 草稿首发：会话已由服务端落库，URL 切到 /chat/:id（threadId 不变不 remount，流式继续）
             if (isDraftMount && !urlNavigated.current) {
               urlNavigated.current = true;

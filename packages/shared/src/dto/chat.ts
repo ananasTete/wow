@@ -17,7 +17,6 @@ export const threadSummarySchema = z.object({
   /** 置顶时间（置顶段排序键），null = 未置顶 */
   pinnedAt: z.string().nullable(),
   createdAt: z.string(),
-  lastMessageAt: z.string(),
   updatedAt: z.string(),
 });
 export type ThreadSummary = z.infer<typeof threadSummarySchema>;
@@ -33,7 +32,7 @@ export type ThreadListResponse = z.infer<typeof threadListResponseSchema>;
 /** 列表查询参数 */
 export const threadListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(20),
-  /** 复合游标 "<lastMessageAtISO>|<id>"，来自上一页 nextCursor */
+  /** 复合游标 "<updatedAtISO>|<id>"，来自上一页 nextCursor（updatedAt 为普通段排序键） */
   cursor: z.string().optional(),
 });
 
@@ -66,7 +65,7 @@ export const threadSearchItemSchema = z.object({
 });
 export type ThreadSearchItem = z.infer<typeof threadSearchItemSchema>;
 
-/** 搜索响应：按 lastMessageAt DESC，标题与正文命中按会话去重 */
+/** 搜索响应：按 updatedAt DESC（与列表排序一致），标题与正文命中按会话去重 */
 export const threadSearchResponseSchema = z.object({
   items: z.array(threadSearchItemSchema),
 });

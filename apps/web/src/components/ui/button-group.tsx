@@ -27,7 +27,6 @@ function ButtonGroup({
   ...props
 }: React.ComponentProps<"div"> & VariantProps<typeof buttonGroupVariants>) {
   return (
-    // biome-ignore lint/a11y/useSemanticElements: shadcn 官方生成的结构，fieldset 会带入默认样式
     <div
       role="group"
       data-slot="button-group"

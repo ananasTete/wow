@@ -20,10 +20,9 @@ import { useChatStore } from "#/features/chat/store";
 import { cn } from "#/lib/utils";
 
 import { useThreadList } from "../hooks/use-thread-list";
+import { dedupeThreads, PAGE_SIZE } from "../lib/thread-list-cache";
 import { ThreadListItem } from "./thread-list-item";
 import { ThreadSearchDialog } from "./thread-search-dialog";
-
-const PAGE_SIZE = 20;
 
 /**
  * 左侧会话目录（ChatGPT 式）：新建 + 无限滚动列表 + 底部用户区，可收起为图标栏。
@@ -58,7 +57,8 @@ export function ThreadSidebar({ className }: { className?: string }) {
     return () => observer.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const threads = data?.pages.flatMap((p) => p.items) ?? [];
+  // 去重兜底：乐观手术与在途 fetchNextPage 竞态时同 id 可能短暂双份（见 thread-list-cache）
+  const threads = dedupeThreads(data?.pages.flatMap((p) => p.items) ?? []);
   // 置顶段全量随每页返回，取首页即可（后续页为同数据的重复快照）
   const pinned = data?.pages[0]?.pinned ?? [];
   const initial = (me?.name || me?.email || "?").trim().charAt(0).toUpperCase();

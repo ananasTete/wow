@@ -1,0 +1,1 @@
+ALTER TABLE "chat_thread" DROP COLUMN "last_message_at";

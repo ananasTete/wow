@@ -42,7 +42,6 @@ const toSummary = (row: ThreadRow): ThreadSummary => ({
   id: row.id,
   title: row.title,
   createdAt: row.createdAt.toISOString(),
-  lastMessageAt: row.lastMessageAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
   pinnedAt: row.pinnedAt ? row.pinnedAt.toISOString() : null,
 });
@@ -73,8 +72,8 @@ export function deriveTitle(parts: Array<{ type: string }>): string {
 
 /**
  * 会话列表（两段式）：置顶段（pinnedAt DESC，全量，上限防御）+
- * 普通段（排除置顶，(lastMessageAt, id) 复合游标 keyset 分页）。
- * cursor 格式 "<lastMessageAtISO>|<id>"，取 limit+1 判断 hasMore。
+ * 普通段（排除置顶，(updatedAt, id) 复合游标 keyset 分页）。
+ * cursor 格式 "<updatedAtISO>|<id>"，取 limit+1 判断 hasMore。
  */
 export async function listThreads(opts: {
   userId: string;
@@ -103,8 +102,8 @@ export async function listThreads(opts: {
       throw new Error("invalid cursor");
     }
     const keyset = or(
-      lt(chatThread.lastMessageAt, cursorTime),
-      and(eq(chatThread.lastMessageAt, cursorTime), lt(chatThread.id, cursorId)),
+      lt(chatThread.updatedAt, cursorTime),
+      and(eq(chatThread.updatedAt, cursorTime), lt(chatThread.id, cursorId)),
     );
     if (keyset) conditions.push(keyset);
   }
@@ -113,7 +112,7 @@ export async function listThreads(opts: {
     .select()
     .from(chatThread)
     .where(and(...conditions))
-    .orderBy(desc(chatThread.lastMessageAt), desc(chatThread.id))
+    .orderBy(desc(chatThread.updatedAt), desc(chatThread.id))
     .limit(limit + 1);
 
   const hasMore = rows.length > limit;
@@ -123,7 +122,7 @@ export async function listThreads(opts: {
   return {
     pinned: pinnedRows.map(toSummary),
     items: page.map(toSummary),
-    nextCursor: hasMore && last ? `${last.lastMessageAt.toISOString()}|${last.id}` : null,
+    nextCursor: hasMore && last ? `${last.updatedAt.toISOString()}|${last.id}` : null,
   };
 }
 
@@ -149,7 +148,7 @@ function buildSnippet(text: string, q: string): string {
 
 /**
  * 全局搜索：标题 ILIKE 命中，或任一消息 text part 命中（jsonb 展开匹配）。
- * 标题与正文命中按会话去重（单表查询），按 lastMessageAt DESC 截 limit。
+ * 标题与正文命中按会话去重（单表查询），按 updatedAt DESC 截 limit（与列表排序一致）。
  * snippet 取每个会话最早命中消息的关键词上下文；仅标题命中时回退首条消息开头。
  */
 export async function searchThreads(opts: {
@@ -172,7 +171,7 @@ export async function searchThreads(opts: {
         ),
       ),
     )
-    .orderBy(desc(chatThread.lastMessageAt), desc(chatThread.id))
+    .orderBy(desc(chatThread.updatedAt), desc(chatThread.id))
     .limit(limit);
 
   if (threads.length === 0) return { items: [] };
@@ -235,7 +234,6 @@ export async function createThread(opts: {
       id: opts.threadId ?? crypto.randomUUID(),
       userId: opts.userId,
       title: opts.title ?? "新对话",
-      lastMessageAt: now,
       createdAt: now,
       updatedAt: now,
     })
@@ -304,7 +302,7 @@ export async function getThreadDetail(
 /**
  * 追加用户消息（延迟创建落地点）：
  * 新会话 insert（标题 = 首条消息截断），已存在则校验所有权；
- * 同事务更新 lastMessageAt。
+ * 同事务更新 updatedAt（会话顶到列表头）。
  */
 export async function appendUserMessage(opts: {
   threadId: string;
@@ -321,7 +319,6 @@ export async function appendUserMessage(opts: {
         id: threadId,
         userId,
         title: deriveTitle(message.parts),
-        lastMessageAt: now,
         createdAt: now,
         updatedAt: now,
       })
@@ -347,7 +344,7 @@ export async function appendUserMessage(opts: {
 
     await tx
       .update(chatThread)
-      .set({ lastMessageAt: now, updatedAt: now })
+      .set({ updatedAt: now })
       .where(eq(chatThread.id, threadId));
   });
 }
@@ -373,7 +370,7 @@ export async function appendAssistantMessage(opts: {
     });
     await tx
       .update(chatThread)
-      .set({ lastMessageAt: now, updatedAt: now })
+      .set({ updatedAt: now })
       .where(eq(chatThread.id, opts.threadId));
   });
 }
